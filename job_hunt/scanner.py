@@ -232,6 +232,8 @@ def fetch_job_details(tf: TinyFish, jobs: list[dict]) -> list[dict]:
 def score_jobs(jobs: list[dict], resume: str, config: dict) -> list[dict]:
     if not jobs:
         return []
+    if config.get("scoring", {}).get("engine") == "explainable":
+        return _score_jobs_explainable(jobs, config)
 
     jobs_text = "\n\n".join(
         f"JOB {i + 1}:\nCompany: {j['company']} | Location: {j['location']}\n"
@@ -295,6 +297,58 @@ def score_jobs(jobs: list[dict], resume: str, config: dict) -> list[dict]:
     passing = len(results)
     logger.debug(f"  {passing}/{len(scored)} jobs passed min_score threshold")
     return sorted(results, key=lambda x: x["score"], reverse=True)
+
+
+def _score_jobs_explainable(jobs: list[dict], config: dict) -> list[dict]:
+    from pydantic import HttpUrl
+
+    from job_hunt.analysis.service import JobAnalyzer
+    from job_hunt.domain.models import CandidateProfile, SearchPreferences, UnifiedJob
+    from job_hunt.llm.config import LLMSettings
+    from job_hunt.normalization import detect_work_mode
+
+    profile = CandidateProfile.model_validate(config["candidate_profile"])
+    preferences = SearchPreferences.model_validate(config["search_preferences"])
+    settings = LLMSettings.from_application_config(config)
+    analyzer = JobAnalyzer(profile, preferences, settings)
+    minimum_score = preferences.filters.minimum_score
+    results: list[dict] = []
+    for raw_job in jobs:
+        try:
+            job = UnifiedJob(
+                source_name="tinyfish",
+                original_url=HttpUrl(raw_job["url"]),
+                company=raw_job["company"],
+                title=raw_job["title"],
+                description=raw_job.get("content", raw_job.get("snippet", "")),
+                location=raw_job.get("location"),
+                work_mode=detect_work_mode(
+                    raw_job.get("title"),
+                    raw_job.get("location"),
+                    raw_job.get("content", "")[:5000],
+                ),
+                apply_url=HttpUrl(raw_job["url"]),
+            )
+            analysis = analyzer.analyze(job)
+        except Exception as exc:
+            logger.warning("Explainable analysis skipped invalid job (%s)", type(exc).__name__)
+            continue
+        if analysis.total_score < minimum_score:
+            continue
+        item = raw_job.copy()
+        item.update(
+            {
+                "score": round(analysis.total_score),
+                "extracted_title": job.title,
+                "stack": ", ".join(analysis.strengths[:3]),
+                "location_remote": job.location or job.work_mode.value,
+                "reason": analysis.explanation,
+                "worth_applying": True,
+                "analysis": analysis.model_dump(mode="json"),
+            }
+        )
+        results.append(item)
+    return sorted(results, key=lambda item: item["score"], reverse=True)
 
 
 def format_telegram_message(top_jobs: list[dict], date_str: str) -> str:

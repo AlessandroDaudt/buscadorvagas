@@ -168,6 +168,17 @@ class SearchFilters(StrictModel):
     include_seen: bool = False
     include_discarded: bool = False
     include_applied: bool = False
+    role_keywords: list[str] = Field(default_factory=list, max_length=200)
+    required_keywords: list[str] = Field(default_factory=list, max_length=200)
+    excluded_keywords: list[str] = Field(default_factory=list, max_length=200)
+    technology_keywords: list[str] = Field(default_factory=list, max_length=300)
+    company_allowlist: list[str] = Field(default_factory=list, max_length=500)
+    company_blocklist: list[str] = Field(default_factory=list, max_length=500)
+    locations: list[str] = Field(default_factory=list, max_length=200)
+    countries: list[str] = Field(default_factory=list, max_length=100)
+    seniorities: list[str] = Field(default_factory=list, max_length=50)
+    languages: list[str] = Field(default_factory=list, max_length=50)
+    contract_types: list[ContractType] = Field(default_factory=list, max_length=10)
 
 
 class ScheduleConfiguration(StrictModel):
@@ -350,4 +361,3 @@ class SalaryEstimateResult(StrictModel):
         if self.minimum is not None and self.maximum is not None and self.maximum < self.minimum:
             raise ValueError("maximum must be greater than or equal to minimum")
         return self
-

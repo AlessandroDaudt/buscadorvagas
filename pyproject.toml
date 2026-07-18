@@ -59,7 +59,7 @@ ignore = ["E501"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["job_hunt"]
-include = ["job_hunt/data/**"]
+include = ["job_hunt/data/**", "job_hunt/prompts/**"]
 
 [tool.mypy]
 python_version = "3.11"

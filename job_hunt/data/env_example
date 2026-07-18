@@ -13,6 +13,12 @@ OPENROUTER_FALLBACK_MODELS="nvidia/nemotron-3-super-120b-a12b:free,google/gemma-
 # Set llm_provider=anthropic in config.json to use Claude instead of OpenRouter
 # ANTHROPIC_API_KEY="your_anthropic_api_key_here"
 
+# OpenAI / Gemini / local OpenAI-compatible providers (optional)
+# OPENAI_API_KEY="your_openai_api_key_here"
+# OPENAI_MODEL="gpt-5.6-sol"
+# GEMINI_API_KEY="your_gemini_api_key_here"
+# LOCAL_LLM_API_KEY="optional_local_key"
+
 # Telegram Notification (optional — create bot via @BotFather)
 TELEGRAM_TOKEN="your_telegram_bot_token_here"
 TELEGRAM_CHAT_ID="your_telegram_chat_id_here"

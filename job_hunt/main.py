@@ -92,6 +92,10 @@ def load_config() -> dict:
         "CLAUDE_CLI_MODEL": "claude_cli_model",
         "ANTHROPIC_API_KEY": "anthropic_api_key",
         "ANTHROPIC_MODEL": "anthropic_model",
+        "OPENAI_API_KEY": "openai_api_key",
+        "OPENAI_MODEL": "openai_model",
+        "GEMINI_API_KEY": "gemini_api_key",
+        "GEMINI_MODEL": "gemini_model",
     }
 
     for env_key, config_key in env_mapping.items():

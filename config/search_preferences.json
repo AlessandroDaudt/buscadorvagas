@@ -120,7 +120,18 @@
     "max_age_days": 30,
     "include_seen": false,
     "include_discarded": false,
-    "include_applied": false
+    "include_applied": false,
+    "role_keywords": [],
+    "required_keywords": [],
+    "excluded_keywords": [],
+    "technology_keywords": [],
+    "company_allowlist": [],
+    "company_blocklist": [],
+    "locations": [],
+    "countries": [],
+    "seniorities": [],
+    "languages": [],
+    "contract_types": []
   },
   "schedule": {
     "enabled": false,
@@ -130,4 +141,3 @@
     "max_duration_minutes": 120
   }
 }
-
