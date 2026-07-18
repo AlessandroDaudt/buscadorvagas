@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "approved": false,
+  "language": "en",
+  "contact": {
+    "name": "Alessandro Luis Daudt",
+    "email": null,
+    "phone": null,
+    "linkedin": null,
+    "github": null,
+    "location": "Novo Hamburgo, Rio Grande do Sul, Brazil"
+  },
+  "summary": "Technology professional with more than 20 years of experience, recent cybersecurity engineering experience at Microsoft, and more than five years in enterprise technical support at Dell Technologies.",
+  "experiences": [
+    {
+      "company": "Microsoft",
+      "title": "Azure Cybersecurity Engineer",
+      "location": null,
+      "start_date": null,
+      "end_date": null,
+      "responsibilities": [
+        "Support and troubleshooting for Microsoft Defender for Endpoint, Defender Antivirus, EDR, Attack Surface Reduction, Web Protection, Indicators of Compromise, and Threat and Vulnerability Management.",
+        "Work involving Microsoft Intune, Microsoft Entra ID, Microsoft Graph API, and third-party application integrations.",
+        "Log, connectivity, and performance analysis in Windows and Linux environments."
+      ],
+      "achievements": [],
+      "technologies": ["Microsoft Defender for Endpoint", "Microsoft Defender Antivirus", "Microsoft Intune", "Microsoft Entra ID", "Microsoft Graph API", "Windows", "Linux"]
+    },
+    {
+      "company": "Dell Technologies",
+      "title": "Technical Support Engineer",
+      "location": null,
+      "start_date": null,
+      "end_date": null,
+      "responsibilities": [
+        "Enterprise technical support for storage, data protection, networking, and virtualized environments.",
+        "Troubleshooting for Dell Compellent Storage, Dell EMC NetWorker, Dell Data Domain, and PowerProtect Data Manager.",
+        "Work involving Windows, Linux, VMware, networking, Fibre Channel, and REST APIs."
+      ],
+      "achievements": [],
+      "technologies": ["Dell Compellent Storage", "Dell EMC NetWorker", "Dell Data Domain", "PowerProtect Data Manager", "Windows", "Linux", "VMware", "Fibre Channel", "REST API"]
+    }
+  ],
+  "skills": ["cybersecurity engineering", "endpoint security", "identity and access management", "enterprise technical support", "advanced troubleshooting", "log analysis", "TLS troubleshooting with Wireshark", "networking", "storage", "data protection"],
+  "education": [
+    {"qualification": "Electrical Engineering", "institution": null, "year": null},
+    {"qualification": "Postgraduate degree in Computer Networks", "institution": null, "year": null},
+    {"qualification": "Postgraduate degree in Cybersecurity Management", "institution": null, "year": null}
+  ],
+  "certifications": ["Microsoft SC-900", "VMware VCP-DCV", "Cisco CCNA", "Microsoft MCSA"],
+  "languages": [
+    {"language": "Portuguese", "level": "native"},
+    {"language": "English", "level": "professional"}
+  ],
+  "projects": []
+}

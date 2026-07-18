@@ -16,6 +16,6 @@ def test_initial_migration_upgrades_empty_sqlite_database(tmp_path):
         assert "application_events" in tables
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert revision == "df89d4c242bb"
+        assert revision == "8a0d8f2c4b91"
     finally:
         engine.dispose()

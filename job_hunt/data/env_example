@@ -22,6 +22,8 @@ OPENROUTER_FALLBACK_MODELS="nvidia/nemotron-3-super-120b-a12b:free,google/gemma-
 # Telegram Notification (optional — create bot via @BotFather)
 TELEGRAM_TOKEN="your_telegram_bot_token_here"
 TELEGRAM_CHAT_ID="your_telegram_chat_id_here"
+# Generate with at least 32 random bytes; authenticates inline action payloads
+TELEGRAM_CALLBACK_SECRET="replace_with_a_long_random_secret"
 
 # Candidate Configuration (overrides config.json)
 CANDIDATE_NAME="Your Name"

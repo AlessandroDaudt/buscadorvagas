@@ -185,7 +185,9 @@ class SalaryEstimateRecord(TimestampMixin, Base):
 
 class GeneratedDocumentRecord(TimestampMixin, Base):
     __tablename__ = "generated_documents"
-    __table_args__ = (UniqueConstraint("job_id", "document_type", "language", "version"),)
+    __table_args__ = (
+        UniqueConstraint("job_id", "document_type", "language", "file_format", "version"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     job_id: Mapped[str] = mapped_column(
@@ -297,4 +299,3 @@ class UserSettingRecord(TimestampMixin, Base):
     key: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
     value_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-

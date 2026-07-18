@@ -2,6 +2,8 @@ from job_hunt import scanner
 from job_hunt.analysis.scoring import DeterministicScorer, consolidate_analysis
 from job_hunt.configuration import load_candidate_profile, load_search_preferences
 from job_hunt.domain.models import UnifiedJob
+from job_hunt.persistence.database import Database
+from job_hunt.persistence.migration import upgrade_database
 
 
 def _config():
@@ -44,3 +46,24 @@ def test_score_jobs_routes_to_explainable_engine(monkeypatch):
 def test_explainable_engine_skips_invalid_job_url():
     jobs = [{"company": "Example", "title": "Security", "location": "Remote", "url": "bad"}]
     assert scanner.score_jobs(jobs, "resume", _config()) == []
+
+
+def test_persistence_attaches_database_job_id_for_actions(tmp_path):
+    database_url = f"sqlite:///{(tmp_path / 'jobs.db').as_posix()}"
+    upgrade_database(database_url)
+    database = Database(database_url)
+    jobs = [
+        {
+            "company": "Example",
+            "title": "Security Engineer",
+            "location": "Remote Brazil",
+            "url": "https://example.com/jobs/1",
+            "content": "Endpoint security",
+        }
+    ]
+    try:
+        decisions = scanner._persist_collected_jobs(jobs, database)
+        assert decisions["new"] == 1
+        assert len(jobs[0]["job_id"]) == 36
+    finally:
+        database.dispose()

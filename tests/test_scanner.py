@@ -188,6 +188,9 @@ def test_run_scan_no_telegram_writes_csv(scan_setup, monkeypatch):
     scanner.run_scan(cfg, companies)
     assert not sent  # no telegram configured
     assert json.loads(scanner.LAST_SCAN_FILE.read_text())[0]["score"] == 90
+    report = json.loads(scanner.LAST_RUN_REPORT_FILE.read_text())
+    assert report["jobs_collected"] == 1
+    assert report["jobs_above_threshold"] == 1
     from pathlib import Path
     assert list(Path("output").glob("jobs_*.csv"))
 

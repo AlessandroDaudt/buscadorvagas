@@ -188,6 +188,16 @@ def init_project() -> None:
         resume_dir / "master_resume.json",
         "resume/master_resume.json created",
     )
+    _copy(
+        "master_resume.en.json",
+        resume_dir / "master_resume.en.json",
+        "resume/master_resume.en.json created",
+    )
+    _copy(
+        "salary_benchmarks.json",
+        cwd / "config" / "salary_benchmarks.json",
+        "config/salary_benchmarks.json created",
+    )
     _copy("resume_template.md", resume_dir / "YOUR_RESUME.md", "resume/YOUR_RESUME.md created — replace with your resume")
 
     (cwd / "state").mkdir(exist_ok=True)
@@ -311,6 +321,10 @@ def main() -> None:
         _run_database_command(sys.argv[2:])
         return
 
+    if cmd == "documents":
+        _run_document_command(sys.argv[2:])
+        return
+
     config = load_config()
 
     if cmd == "scan":
@@ -324,7 +338,62 @@ def main() -> None:
         draft_application(config, sys.argv[2])
 
     else:
-        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | export | db | mcp")
+        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | documents | export | db | mcp")
+
+
+def _run_document_command(args: list[str]) -> None:
+    if not args:
+        sys.exit("Usage: autopilot documents #N [--language en|pt-BR]")
+    if not LAST_SCAN_FILE.exists():
+        sys.exit("No scan found. Run: autopilot scan")
+    language = "en"
+    if "--language" in args:
+        index = args.index("--language")
+        try:
+            language = args[index + 1]
+        except IndexError:
+            sys.exit("--language requires en or pt-BR")
+    try:
+        number = int("".join(character for character in args[0] if character.isdigit()))
+        if number < 1:
+            raise ValueError("job numbers start at one")
+        raw = json.loads(LAST_SCAN_FILE.read_text(encoding="utf-8"))[number - 1]
+    except (ValueError, IndexError, json.JSONDecodeError):
+        sys.exit("Invalid job reference; use an entry such as #1 from the last scan")
+
+    from pydantic import HttpUrl
+
+    from job_hunt.analysis.scoring import DeterministicScorer, consolidate_analysis
+    from job_hunt.configuration import load_candidate_profile, load_search_preferences
+    from job_hunt.documents.generator import DocumentGenerator
+    from job_hunt.domain.models import JobAnalysisResult, MasterResume, UnifiedJob
+    from job_hunt.normalization import detect_work_mode
+
+    master_path = Path(
+        "resume/master_resume.en.json"
+        if language.lower().startswith("en")
+        else "resume/master_resume.json"
+    )
+    master = MasterResume.model_validate_json(master_path.read_text(encoding="utf-8"))
+    job = UnifiedJob(
+        source_name=str(raw.get("source_name", "legacy")),
+        original_url=HttpUrl(raw["url"]),
+        company=raw["company"],
+        title=raw.get("extracted_title") or raw["title"],
+        description=raw.get("content", raw.get("snippet", "")),
+        location=raw.get("location"),
+        work_mode=detect_work_mode(raw.get("location"), raw.get("content", "")),
+        apply_url=HttpUrl(raw["url"]),
+    )
+    if raw.get("analysis"):
+        analysis = JobAnalysisResult.model_validate(raw["analysis"])
+    else:
+        analysis = consolidate_analysis(
+            DeterministicScorer(load_search_preferences(), load_candidate_profile()).score(job)
+        )
+    package = DocumentGenerator(master).generate(job, analysis)
+    print(f"Documents generated in {package.directory}")
+    print("Review and edit them before submitting manually.")
 
 
 def _run_database_command(args: list[str]) -> None:

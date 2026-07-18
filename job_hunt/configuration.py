@@ -9,10 +9,12 @@ from typing import TypeVar
 from pydantic import BaseModel, ValidationError
 
 from job_hunt.domain.models import CandidateProfile, MasterResume, SearchPreferences
+from job_hunt.salary import SalaryConfiguration
 
 DEFAULT_CANDIDATE_PROFILE = Path("config/candidate_profile.json")
 DEFAULT_SEARCH_PREFERENCES = Path("config/search_preferences.json")
 DEFAULT_MASTER_RESUME = Path("resume/master_resume.json")
+DEFAULT_SALARY_CONFIGURATION = Path("config/salary_benchmarks.json")
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -48,6 +50,12 @@ def load_search_preferences(path: Path = DEFAULT_SEARCH_PREFERENCES) -> SearchPr
 
 def load_master_resume(path: Path = DEFAULT_MASTER_RESUME) -> MasterResume:
     return _load_json_model(path, MasterResume)
+
+
+def load_salary_configuration(
+    path: Path = DEFAULT_SALARY_CONFIGURATION,
+) -> SalaryConfiguration:
+    return _load_json_model(path, SalaryConfiguration)
 
 
 def enrich_legacy_config(config: dict) -> dict:

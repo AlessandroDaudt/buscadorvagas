@@ -32,6 +32,7 @@
   "master_resume_path": "resume/master_resume.json",
   "persistence": {"enabled": true},
   "scoring": {"engine": "explainable"},
+  "telegram": {"enabled": false, "rich_alerts": true},
   "candidate": {
     "name": "Alessandro Luis Daudt",
     "resume_path": "resume/YOUR_RESUME.md",

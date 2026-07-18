@@ -2,6 +2,7 @@ import csv
 import json
 import re
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,7 @@ logger = get_logger()
 STATE_FILE = Path("state/seen_jobs.json")
 LAST_SCAN_FILE = Path("state/last_scan.json")
 JOB_HISTORY_FILE = Path("state/job_history.json")
+LAST_RUN_REPORT_FILE = Path("state/last_run_report.json")
 
 JOB_URL_RE = re.compile(
     r"/(job|jobs|opening|openings|position|positions|vacancy|vacancies|role|roles|apply)"
@@ -300,6 +302,8 @@ def score_jobs(jobs: list[dict], resume: str, config: dict) -> list[dict]:
 
 
 def _score_jobs_explainable(jobs: list[dict], config: dict) -> list[dict]:
+    from uuid import UUID, uuid4
+
     from pydantic import HttpUrl
 
     from job_hunt.analysis.service import JobAnalyzer
@@ -316,6 +320,7 @@ def _score_jobs_explainable(jobs: list[dict], config: dict) -> list[dict]:
     for raw_job in jobs:
         try:
             job = UnifiedJob(
+                id=UUID(raw_job["job_id"]) if raw_job.get("job_id") else uuid4(),
                 source_name="tinyfish",
                 original_url=HttpUrl(raw_job["url"]),
                 company=raw_job["company"],
@@ -345,6 +350,7 @@ def _score_jobs_explainable(jobs: list[dict], config: dict) -> list[dict]:
                 "reason": analysis.explanation,
                 "worth_applying": True,
                 "analysis": analysis.model_dump(mode="json"),
+                "job_id": str(job.id),
             }
         )
         results.append(item)
@@ -363,6 +369,49 @@ def format_telegram_message(top_jobs: list[dict], date_str: str) -> str:
         )
     lines.append('Reply "apply to #N" to draft application.')
     return "\n".join(lines)
+
+
+def _send_rich_telegram_alerts(top_jobs: list[dict], telegram_config: dict) -> bool:
+    import os
+    from uuid import UUID, uuid4
+
+    from pydantic import HttpUrl
+
+    from job_hunt.domain.models import JobAnalysisResult, SalaryEstimateResult, UnifiedJob
+    from job_hunt.normalization import detect_work_mode
+    from job_hunt.telegram import CallbackSigner, TelegramClient
+
+    client = TelegramClient(telegram_config["token"], telegram_config["chat_id"])
+    callback_secret = os.getenv("TELEGRAM_CALLBACK_SECRET")
+    signer = CallbackSigner(callback_secret) if callback_secret else None
+    sent = 0
+    for raw in top_jobs:
+        if not raw.get("analysis"):
+            logger.warning("Rich Telegram alert skipped because structured analysis is missing")
+            continue
+        try:
+            job = UnifiedJob(
+                id=UUID(raw["job_id"]) if raw.get("job_id") else uuid4(),
+                source_name=str(raw.get("source_name", "tinyfish")),
+                original_url=HttpUrl(raw["url"]),
+                company=raw["company"],
+                title=raw.get("extracted_title") or raw["title"],
+                description=raw.get("content", ""),
+                location=raw.get("location"),
+                work_mode=detect_work_mode(raw.get("location"), raw.get("content", "")),
+                apply_url=HttpUrl(raw["url"]),
+            )
+            analysis = JobAnalysisResult.model_validate(raw["analysis"])
+            salary = (
+                SalaryEstimateResult.model_validate(raw["salary_estimate"])
+                if raw.get("salary_estimate")
+                else None
+            )
+            client.send_job_alert(job, analysis, salary=salary, signer=signer)
+            sent += 1
+        except Exception as exc:
+            logger.warning("Rich Telegram alert failed (%s)", type(exc).__name__)
+    return sent == len(top_jobs)
 
 
 def _export_to_csv(jobs: list[dict], label: str) -> Path:
@@ -411,16 +460,16 @@ def _initialize_database(config: dict):
         return None
 
 
-def _persist_collected_jobs(jobs: list[dict], database) -> None:
-    from job_hunt.collection import persist_unified_jobs
+def _persist_collected_jobs(jobs: list[dict], database):
     from job_hunt.domain.models import UnifiedJob
     from job_hunt.normalization import detect_work_mode
+    from job_hunt.persistence.job_ingestion import JobIngestionService
 
-    unified_jobs = []
+    unified_jobs: list[tuple[dict, UnifiedJob]] = []
     for job in jobs:
         try:
             unified_jobs.append(
-                UnifiedJob(
+                (job, UnifiedJob(
                     source_name="tinyfish",
                     original_url=job["url"],
                     company=job["company"],
@@ -433,13 +482,20 @@ def _persist_collected_jobs(jobs: list[dict], database) -> None:
                         job.get("content", "")[:5000],
                     ),
                     apply_url=job["url"],
-                )
+                ))
             )
         except Exception as validation_error:
             logger.warning(f"  Invalid collected job ignored by database: {validation_error}")
+    decisions: Counter[str] = Counter()
     if unified_jobs:
-        decisions = persist_unified_jobs(unified_jobs, database)
+        with database.session() as session:
+            ingestion = JobIngestionService(session)
+            for raw_job, unified_job in unified_jobs:
+                outcome = ingestion.ingest(unified_job)
+                raw_job["job_id"] = outcome.job_id
+                decisions[outcome.decision.value] += 1
         logger.info(f"  Database history updated: {dict(decisions)}")
+    return decisions
 
 
 def run_scan(config: dict, companies: list[dict]) -> None:
@@ -476,6 +532,8 @@ def run_scan(config: dict, companies: list[dict]) -> None:
     logger.info(f"State loaded — {len(seen_urls)} previously seen URLs")
 
     all_scored_jobs: list[dict] = []
+    ingestion_decisions: Counter[str] = Counter()
+    jobs_collected_total = 0
     errors: list[str] = []
     companies_scanned = 0
     companies_with_jobs = 0
@@ -491,9 +549,10 @@ def run_scan(config: dict, companies: list[dict]) -> None:
 
             logger.info(f"  {len(new_jobs)} new job URL(s) — fetching details...")
             new_jobs = fetch_job_details(tf, new_jobs)
+            jobs_collected_total += len(new_jobs)
             if database is not None:
                 try:
-                    _persist_collected_jobs(new_jobs, database)
+                    ingestion_decisions.update(_persist_collected_jobs(new_jobs, database))
                 except Exception as persistence_error:
                     logger.error(f"  Database persistence failed: {persistence_error}")
             seen_urls.update(j["url"] for j in new_jobs)
@@ -559,6 +618,22 @@ def run_scan(config: dict, companies: list[dict]) -> None:
     logger.debug(f"Job history updated: +{len(new_entries)} new entries ({len(history)} total)")
 
     elapsed = time.time() - scan_start
+    from job_hunt.reports import SearchRunReport
+
+    run_report = SearchRunReport(
+        sources_consulted=[company["name"] for company in companies[:companies_scanned]],
+        source_errors={"scanner": " | ".join(errors)} if errors else {},
+        jobs_collected=jobs_collected_total,
+        jobs_new=ingestion_decisions["new"],
+        jobs_updated=ingestion_decisions["updated"] + ingestion_decisions["republished"],
+        duplicates_removed=ingestion_decisions["duplicate"] + ingestion_decisions["unchanged"],
+        jobs_analyzed=len(all_scored_jobs),
+        jobs_above_threshold=len(top_jobs),
+        duration_seconds=elapsed,
+        errors=errors,
+    )
+    LAST_RUN_REPORT_FILE.write_text(run_report.model_dump_json(indent=2), encoding="utf-8")
+    logger.info("\n" + run_report.as_text())
     logger.info(
         f"=== Scan complete — {companies_scanned}/{total} companies, "
         f"{len(all_scored_jobs)} jobs found, {len(top_jobs)} top matches "
@@ -572,7 +647,9 @@ def run_scan(config: dict, companies: list[dict]) -> None:
 
     date_str = datetime.now().strftime("%d %b %Y")
     tg = config.get("telegram", {})
-    telegram_configured = bool(tg.get("token") and tg.get("chat_id"))
+    telegram_configured = bool(
+        tg.get("enabled", True) and tg.get("token") and tg.get("chat_id")
+    )
 
     # Always persist results to CSV when there are scored jobs — this is the
     # durable record regardless of whether Telegram is configured.
@@ -595,7 +672,11 @@ def run_scan(config: dict, companies: list[dict]) -> None:
     # Telegram is an optional notification on top of the CSV. When it's not
     # configured we simply skip it — no error, the CSV already holds the results.
     if telegram_configured:
-        sent = send_telegram(tg["token"], tg["chat_id"], msg)
+        sent = (
+            _send_rich_telegram_alerts(top_jobs, tg)
+            if tg.get("rich_alerts")
+            else send_telegram(tg["token"], tg["chat_id"], msg)
+        )
         if sent:
             logger.info(f"Telegram notification sent. Results also saved to CSV: {csv_path}")
         else:

@@ -34,6 +34,7 @@ dependencies = [
 [project.optional-dependencies]
 mcp = ["mcp>=1.9"]
 claude = ["anthropic>=0.30.0"]
+documents = ["python-docx>=1.1,<2", "pypdf>=5,<7"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.4", "mypy>=1.8", "mcp>=1.9"]
 
