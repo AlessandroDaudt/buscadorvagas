@@ -126,23 +126,24 @@ def test_load_config_missing(tmp_path, monkeypatch):
 
 def test_load_config_env_override(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({"tinyfish_api_key": "sk-config"}))
+    (tmp_path / "config.json").write_text(json.dumps({}))
     monkeypatch.setenv("TINYFISH_API_KEY", "sk-env-real")
     cfg = main.load_config()
     assert cfg["tinyfish_api_key"] == "sk-env-real"
 
 
-def test_load_config_placeholder_does_not_clobber(tmp_path, monkeypatch, clean_env):
+def test_load_config_placeholder_secret_is_not_accepted(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({"tinyfish_api_key": "sk-config-real"}))
+    (tmp_path / "config.json").write_text(json.dumps({}))
     monkeypatch.setenv("TINYFISH_API_KEY", "your_tinyfish_api_key_here")
-    cfg = main.load_config()
-    assert cfg["tinyfish_api_key"] == "sk-config-real"
+    with pytest.raises(SystemExit, match="TINYFISH_API_KEY not set"):
+        main.load_config()
 
 
 def test_load_config_telegram_and_candidate_env(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({"tinyfish_api_key": "sk-real"}))
+    (tmp_path / "config.json").write_text(json.dumps({}))
+    monkeypatch.setenv("TINYFISH_API_KEY", "sk-real")
     monkeypatch.setenv("TELEGRAM_TOKEN", "tok")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
     monkeypatch.setenv("CANDIDATE_NAME", "Ada")
@@ -163,6 +164,14 @@ def test_load_config_missing_tinyfish_key_exits(tmp_path, monkeypatch, clean_env
         main.load_config()
 
 
+def test_load_config_rejects_embedded_secret(tmp_path, monkeypatch, clean_env):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.json").write_text(json.dumps({"tinyfish_api_key": "sk-real"}))
+    monkeypatch.setenv("TINYFISH_API_KEY", "sk-env")
+    with pytest.raises(SystemExit, match="Secrets are not allowed"):
+        main.load_config()
+
+
 def test_export_jobs_days_with_history(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "state").mkdir()
@@ -179,7 +188,10 @@ def test_init_project_scaffolds(tmp_path, monkeypatch, capsys):
     assert (tmp_path / "companies.json").exists()
     assert (tmp_path / "config.json").exists()
     assert (tmp_path / ".env").exists()
+    assert (tmp_path / "config" / "candidate_profile.json").exists()
+    assert (tmp_path / "config" / "search_preferences.json").exists()
     assert (tmp_path / "resume" / "YOUR_RESUME.md").exists()
+    assert (tmp_path / "resume" / "master_resume.json").exists()
     assert (tmp_path / "state").is_dir() and (tmp_path / "output").is_dir()
     # idempotent — second run skips without error
     main.init_project()

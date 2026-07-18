@@ -9,6 +9,10 @@ Usage:
   autopilot export --min 60   — export only jobs with score >= 60
   autopilot export --days 7   — export jobs from last 7 days (requires scan history)
   autopilot export --days 7 --min 60  — combine filters
+  autopilot db upgrade        — create/update the configured database
+  autopilot db current        — show the current migration revision
+  autopilot db seed           — migrate and load the configured profile/companies
+  autopilot db import-legacy  — import original JSON history idempotently
   autopilot mcp               — run the MCP server over stdio (for Claude Code)
 """
 import csv
@@ -25,6 +29,14 @@ _PLACEHOLDERS = {
     "YOUR_OPENROUTER_API_KEY", "your_openrouter_api_key_here",
     "YOUR_ANTHROPIC_API_KEY", "your_anthropic_api_key_here",
 }
+
+_SECRET_CONFIG_KEYS = (
+    "tinyfish_api_key",
+    "openrouter_api_key",
+    "anthropic_api_key",
+    "openai_api_key",
+    "gemini_api_key",
+)
 
 
 def _is_placeholder(val: str) -> bool:
@@ -49,7 +61,27 @@ def load_config() -> dict:
     if not p.exists():
         sys.exit("config.json not found.\nRun 'autopilot init' to set up your working directory.")
 
-    config = json.loads(p.read_text())
+    try:
+        config = json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        sys.exit(f"Invalid config.json at line {exc.lineno}, column {exc.colno}")
+
+    embedded_secrets = [
+        key
+        for key in _SECRET_CONFIG_KEYS
+        if _use_env(str(config.get(key, "")))
+    ]
+    telegram = config.get("telegram", {})
+    if isinstance(telegram, dict) and any(
+        _use_env(str(telegram.get(key, ""))) for key in ("token", "chat_id")
+    ):
+        embedded_secrets.append("telegram")
+    if embedded_secrets:
+        names = ", ".join(sorted(embedded_secrets))
+        sys.exit(
+            f"Secrets are not allowed in config.json ({names}).\n"
+            "Move them to .env or environment variables before continuing."
+        )
 
     env_mapping = {
         "TINYFISH_API_KEY": "tinyfish_api_key",
@@ -104,7 +136,9 @@ def load_config() -> dict:
         if cand_top_n:
             config["candidate"]["top_n"] = int(cand_top_n)
 
-    return config
+    from job_hunt.configuration import enrich_legacy_config
+
+    return enrich_legacy_config(config)
 
 
 def load_companies() -> list:
@@ -124,6 +158,7 @@ def init_project() -> None:
         if dest.exists():
             print(f"  {dest.name} already exists, skipping")
         else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(data_pkg.joinpath(src_name).read_text(encoding="utf-8"), encoding="utf-8")
             print(f"✓ {label}")
 
@@ -131,17 +166,35 @@ def init_project() -> None:
     _copy("config.example.json", cwd / "config.json", "config.json created — fill in your API keys and profile")
     _copy("env_example", cwd / ".env", ".env created — fill in your API keys")
 
+    _copy(
+        "candidate_profile.json",
+        cwd / "config" / "candidate_profile.json",
+        "config/candidate_profile.json created",
+    )
+    _copy(
+        "search_preferences.json",
+        cwd / "config" / "search_preferences.json",
+        "config/search_preferences.json created",
+    )
+
     resume_dir = cwd / "resume"
     resume_dir.mkdir(exist_ok=True)
+    _copy(
+        "master_resume.json",
+        resume_dir / "master_resume.json",
+        "resume/master_resume.json created",
+    )
     _copy("resume_template.md", resume_dir / "YOUR_RESUME.md", "resume/YOUR_RESUME.md created — replace with your resume")
 
     (cwd / "state").mkdir(exist_ok=True)
     (cwd / "output").mkdir(exist_ok=True)
 
     print("\nNext:")
+    print("  0. Keep secrets only in .env")
     print("  1. Edit config.json — set your name, profile, and API keys")
     print("  2. Replace resume/YOUR_RESUME.md with your actual resume")
-    print("  3. Run: autopilot scan")
+    print("  3. Run: autopilot db seed")
+    print("  4. Run: autopilot scan")
 
 
 LAST_SCAN_FILE = Path("state/last_scan.json")
@@ -250,6 +303,10 @@ def main() -> None:
         export_jobs(min_score=min_score, days=days)
         return
 
+    if cmd == "db":
+        _run_database_command(sys.argv[2:])
+        return
+
     config = load_config()
 
     if cmd == "scan":
@@ -263,7 +320,67 @@ def main() -> None:
         draft_application(config, sys.argv[2])
 
     else:
-        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | export | mcp")
+        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | export | db | mcp")
+
+
+def _run_database_command(args: list[str]) -> None:
+    from job_hunt.persistence.database import Database, get_database_url
+    from job_hunt.persistence.migration import current_revision, upgrade_database
+
+    action = args[0].lower() if args else "upgrade"
+    database_url = get_database_url()
+    if action == "upgrade":
+        upgrade_database(database_url)
+        print("Database upgraded to the latest revision.")
+        return
+    if action == "current":
+        current_revision(database_url)
+        return
+    if action == "seed":
+        from job_hunt.configuration import (
+            load_candidate_profile,
+            load_master_resume,
+            load_search_preferences,
+        )
+        from job_hunt.persistence.repositories import CandidateRepository, CompanyRepository
+
+        upgrade_database(database_url)
+        profile = load_candidate_profile()
+        resume = load_master_resume()
+        preferences = load_search_preferences()
+        database = Database(database_url)
+        try:
+            with database.session() as session:
+                candidates = CandidateRepository(session)
+                candidate = candidates.save_profile(profile)
+                candidates.save_resume(candidate, resume)
+                companies = CompanyRepository(session)
+                for company_name in preferences.monitored_companies:
+                    companies.get_or_create(company_name, priority=True)
+        finally:
+            database.dispose()
+        print(
+            f"Database seeded for {profile.identity.name}: "
+            f"{len(preferences.monitored_companies)} priority companies."
+        )
+        return
+    if action == "import-legacy":
+        from job_hunt.persistence.legacy_import import import_legacy_state
+
+        upgrade_database(database_url)
+        database = Database(database_url)
+        try:
+            with database.session() as session:
+                report = import_legacy_state(session)
+        finally:
+            database.dispose()
+        print(
+            "Legacy import complete: "
+            f"{report.jobs_created} created, {report.jobs_existing} existing, "
+            f"{report.jobs_skipped} skipped."
+        )
+        return
+    sys.exit("Usage: autopilot db [upgrade|current|seed|import-legacy]")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,9 @@ config.json
 
 # Runtime state — personal data
 state/*.json
+state/*.db
+state/*.db-shm
+state/*.db-wal
 output/
 !output/.gitkeep
 scan.log

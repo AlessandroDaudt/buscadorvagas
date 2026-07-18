@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "name": "Alessandro Luis Daudt",
+    "home_city": "Novo Hamburgo",
+    "state": "Rio Grande do Sul",
+    "country": "Brasil"
+  },
+  "work_preferences": {
+    "remote_preferred": true,
+    "open_to_brazil": true,
+    "open_to_international_from_brazil": true,
+    "hybrid_or_onsite_states": ["Rio Grande do Sul"],
+    "location_priority": [
+      "remote_brazil",
+      "remote_latin_america",
+      "remote_international_accepting_brazil",
+      "rio_grande_do_sul",
+      "porto_alegre_metro",
+      "novo_hamburgo_region",
+      "other_brazil"
+    ]
+  },
+  "professional_summary": {
+    "years_in_technology": 20,
+    "dell_years_minimum": 5,
+    "recent_employer": "Microsoft",
+    "domains": [
+      "global enterprise technical support",
+      "cybersecurity engineering",
+      "endpoint security",
+      "identity and access management",
+      "advanced troubleshooting",
+      "enterprise customer support"
+    ]
+  },
+  "experiences": [
+    {
+      "company": "Microsoft",
+      "title": "Azure Cybersecurity Engineer",
+      "start_date": null,
+      "end_date": null,
+      "skills": [
+        "Microsoft Defender for Endpoint",
+        "Microsoft Defender Antivirus",
+        "EDR",
+        "Attack Surface Reduction",
+        "Web Protection",
+        "Indicators of Compromise",
+        "Threat and Vulnerability Management",
+        "Microsoft Intune",
+        "Microsoft Entra ID",
+        "Microsoft Graph API",
+        "third-party application integration",
+        "connectivity troubleshooting",
+        "log analysis",
+        "Windows performance troubleshooting",
+        "Linux performance troubleshooting"
+      ]
+    },
+    {
+      "company": "Dell Technologies",
+      "title": "Technical Support Engineer",
+      "start_date": null,
+      "end_date": null,
+      "skills": [
+        "Dell Compellent Storage",
+        "Dell EMC NetWorker",
+        "Dell Data Domain",
+        "PowerProtect Data Manager",
+        "Windows",
+        "Linux",
+        "VMware",
+        "networking",
+        "Fibre Channel",
+        "REST APIs",
+        "enterprise systems troubleshooting"
+      ]
+    }
+  ],
+  "education": [
+    {"qualification": "Engenharia Elétrica", "institution": null, "year": null},
+    {"qualification": "Pós-graduação em Redes de Computadores", "institution": null, "year": null},
+    {"qualification": "Pós-graduação em Gestão de Segurança Cibernética", "institution": null, "year": null}
+  ],
+  "certifications": [
+    "Microsoft SC-900",
+    "VMware VCP-DCV",
+    "Cisco CCNA",
+    "Microsoft MCSA"
+  ],
+  "languages": [
+    {"language": "Português", "level": "nativo"},
+    {"language": "Inglês", "level": "profissional", "notes": "Experiência em atendimento global"}
+  ]
+}
+

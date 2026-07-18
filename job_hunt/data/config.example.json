@@ -1,22 +1,18 @@
 {
-  "tinyfish_api_key": "YOUR_TINYFISH_API_KEY",
   "llm_provider": "openrouter",
-  "openrouter_api_key": "YOUR_OPENROUTER_API_KEY",
   "openrouter_model": "meta-llama/llama-3.3-70b-instruct:free",
   "openrouter_fallback_models": [
     "nvidia/nemotron-3-super-120b-a12b:free",
     "google/gemma-4-31b-it:free",
     "qwen/qwen3-coder:free"
   ],
-  "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY",
   "anthropic_model": "claude-haiku-4-5-20251001",
   "claude_cli_model": "",
-  "telegram": {
-    "token": "YOUR_TELEGRAM_BOT_TOKEN",
-    "chat_id": "YOUR_TELEGRAM_CHAT_ID"
-  },
+  "candidate_profile_path": "config/candidate_profile.json",
+  "search_preferences_path": "config/search_preferences.json",
+  "master_resume_path": "resume/master_resume.json",
   "candidate": {
-    "name": "Your Name",
+    "name": "Alessandro Luis Daudt",
     "resume_path": "resume/YOUR_RESUME.md",
     "profile": "10+ YOE, Senior/Staff ML/AI Engineer. Stack: Python, LLMs, RAG, AWS, MLOps",
     "seeking": "Remote-friendly or relocation to EU / NA / APAC",

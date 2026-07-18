@@ -23,13 +23,17 @@ classifiers = [
 dependencies = [
     "tinyfish>=0.2.5",
     "openai>=2.0.0",
+    "pydantic>=2.11,<3",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.13,<2",
 ]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.9"]
 claude = ["anthropic>=0.30.0"]
+postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.4", "mypy>=1.8", "mcp>=1.9"]
 
 [project.scripts]

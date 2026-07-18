@@ -1,9 +1,5 @@
-"""config.json + .env composition.
+"""config.json + environment composition with secret isolation."""
 
-Rule: an env var overrides config.json only when it's set AND not a placeholder.
-The default `.env` template written by `autopilot init` is full of `your_..._here`
-placeholders — those must never clobber real values in config.json.
-"""
 import json
 
 import pytest
@@ -14,46 +10,47 @@ from job_hunt import main
 @pytest.fixture
 def workdir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    # Start from a clean env so the host shell's keys don't leak into assertions.
-    for k in ("TINYFISH_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY",
-              "ANTHROPIC_MODEL", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"):
-        monkeypatch.delenv(k, raising=False)
+    for key in (
+        "TINYFISH_API_KEY",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MODEL",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_MODEL",
+        "TELEGRAM_TOKEN",
+        "TELEGRAM_CHAT_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("TINYFISH_API_KEY", "sk-real-env-key")
     return tmp_path
 
 
 def _write_config(workdir, **overrides):
-    cfg = {"tinyfish_api_key": "sk-real-config-key"}
-    cfg.update(overrides)
-    (workdir / "config.json").write_text(json.dumps(cfg))
+    (workdir / "config.json").write_text(json.dumps(overrides))
 
 
-def test_placeholder_env_does_not_override_real_config(workdir, monkeypatch):
-    _write_config(workdir, openrouter_api_key="sk-or-real-config")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "your_openrouter_api_key_here")
+def test_placeholder_env_does_not_override_nonsecret_config(workdir, monkeypatch):
+    _write_config(workdir, openrouter_model="configured/model")
+    monkeypatch.setenv("OPENROUTER_MODEL", "your_openrouter_model_here")
 
     cfg = main.load_config()
 
-    assert cfg["openrouter_api_key"] == "sk-or-real-config"
+    assert cfg["openrouter_model"] == "configured/model"
 
 
-def test_real_env_overrides_config(workdir, monkeypatch):
-    _write_config(workdir, openrouter_api_key="sk-or-from-config")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-from-env")
+def test_real_env_overrides_nonsecret_config(workdir, monkeypatch):
+    _write_config(workdir, openrouter_model="configured/model")
+    monkeypatch.setenv("OPENROUTER_MODEL", "environment/model")
 
     cfg = main.load_config()
 
-    assert cfg["openrouter_api_key"] == "sk-or-from-env"
+    assert cfg["openrouter_model"] == "environment/model"
 
 
-def test_placeholder_tinyfish_env_does_not_break_real_config_key(workdir, monkeypatch):
-    """The exact 'config.json and .env don't compose' bug: real key in config,
-    placeholder in .env — must not exit with 'TINYFISH_API_KEY not set'."""
-    _write_config(workdir)  # tinyfish_api_key = sk-real-config-key
-    monkeypatch.setenv("TINYFISH_API_KEY", "YOUR_TINYFISH_API_KEY")
+def test_secret_in_config_is_rejected(workdir):
+    _write_config(workdir, tinyfish_api_key="sk-must-not-be-in-json")
 
-    cfg = main.load_config()  # must not SystemExit
-
-    assert cfg["tinyfish_api_key"] == "sk-real-config-key"
+    with pytest.raises(SystemExit, match="Secrets are not allowed"):
+        main.load_config()
 
 
 def test_anthropic_key_bridged_from_env(workdir, monkeypatch):

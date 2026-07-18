@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "approved": false,
+  "language": "pt-BR",
+  "contact": {
+    "name": "Alessandro Luis Daudt",
+    "email": null,
+    "phone": null,
+    "linkedin": null,
+    "github": null,
+    "location": "Novo Hamburgo, Rio Grande do Sul, Brasil"
+  },
+  "summary": "Profissional de tecnologia com mais de 20 anos de experiência, atuação recente em engenharia de cibersegurança na Microsoft e mais de cinco anos em suporte técnico corporativo na Dell Technologies.",
+  "experiences": [
+    {
+      "company": "Microsoft",
+      "title": "Azure Cybersecurity Engineer",
+      "location": null,
+      "start_date": null,
+      "end_date": null,
+      "responsibilities": [
+        "Suporte e troubleshooting em Microsoft Defender for Endpoint, Defender Antivirus, EDR, Attack Surface Reduction, Web Protection, Indicators of Compromise e Threat and Vulnerability Management.",
+        "Atuação com Microsoft Intune, Microsoft Entra ID, Microsoft Graph API e integrações com aplicações de terceiros.",
+        "Análise de logs, conectividade e performance em ambientes Windows e Linux."
+      ],
+      "achievements": [],
+      "technologies": [
+        "Microsoft Defender for Endpoint",
+        "Microsoft Defender Antivirus",
+        "Microsoft Intune",
+        "Microsoft Entra ID",
+        "Microsoft Graph API",
+        "Windows",
+        "Linux"
+      ]
+    },
+    {
+      "company": "Dell Technologies",
+      "title": "Technical Support Engineer",
+      "location": null,
+      "start_date": null,
+      "end_date": null,
+      "responsibilities": [
+        "Suporte técnico corporativo para armazenamento, proteção de dados, redes e ambientes virtualizados.",
+        "Troubleshooting em Dell Compellent Storage, Dell EMC NetWorker, Dell Data Domain e PowerProtect Data Manager.",
+        "Atuação com Windows, Linux, VMware, networking, Fibre Channel e REST APIs."
+      ],
+      "achievements": [],
+      "technologies": [
+        "Dell Compellent Storage",
+        "Dell EMC NetWorker",
+        "Dell Data Domain",
+        "PowerProtect Data Manager",
+        "Windows",
+        "Linux",
+        "VMware",
+        "Fibre Channel",
+        "REST API"
+      ]
+    }
+  ],
+  "skills": [
+    "cybersecurity engineering",
+    "endpoint security",
+    "identity and access management",
+    "enterprise technical support",
+    "advanced troubleshooting",
+    "log analysis",
+    "TLS troubleshooting with Wireshark",
+    "networking",
+    "storage",
+    "data protection"
+  ],
+  "education": [
+    {"qualification": "Engenharia Elétrica", "institution": null, "year": null},
+    {"qualification": "Pós-graduação em Redes de Computadores", "institution": null, "year": null},
+    {"qualification": "Pós-graduação em Gestão de Segurança Cibernética", "institution": null, "year": null}
+  ],
+  "certifications": ["Microsoft SC-900", "VMware VCP-DCV", "Cisco CCNA", "Microsoft MCSA"],
+  "languages": [
+    {"language": "Português", "level": "nativo"},
+    {"language": "Inglês", "level": "profissional"}
+  ],
+  "projects": []
+}
