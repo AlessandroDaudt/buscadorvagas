@@ -9,6 +9,7 @@ from job_hunt.llm.base import StructuredResponse, StructuredT
 from job_hunt.llm.config import LLMSettings, ProviderSettings
 from job_hunt.llm.providers import build_provider
 from job_hunt.log import get_logger
+from job_hunt.metrics import metrics
 
 logger = get_logger()
 
@@ -77,6 +78,10 @@ class LLMRouter:
                         max_output_tokens=self.settings.max_output_tokens,
                     )
                     self.run_cost_usd += response.usage.estimated_cost_usd
+                    metrics.increment("llm_input_tokens_total", response.usage.input_tokens)
+                    metrics.increment("llm_output_tokens_total", response.usage.output_tokens)
+                    metrics.increment("llm_estimated_cost_usd", response.usage.estimated_cost_usd)
+                    metrics.observe("llm_request_duration", response.duration_seconds)
                     logger.info(
                         "Structured LLM analysis completed via %s/%s in %.2fs",
                         response.provider,
@@ -87,6 +92,7 @@ class LLMRouter:
                 except LLMBudgetExceeded:
                     raise
                 except Exception as exc:
+                    metrics.increment("llm_errors_total")
                     failures.append(f"{candidate.provider}/{candidate.model}: {type(exc).__name__}")
                     logger.warning(
                         "Structured LLM attempt failed via %s/%s (%s)",

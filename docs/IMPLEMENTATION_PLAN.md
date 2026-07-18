@@ -824,9 +824,10 @@ comando de export/import testado; não dependerá de copiar o arquivo SQLite dir
 - ADR 0001 — SQLite, PostgreSQL, SQLAlchemy e Alembic.
 - ADR 0002 — identidade, normalização e deduplicação de vagas.
 - ADR 0003 — abstração de providers LLM, schemas, cache e orçamento.
-- ADR 0004 — framework e modelo de autenticação do painel.
-- ADR 0005 — scheduler, jobs, lock e workers.
+- ADR 0004 — autenticação de callbacks do Telegram.
+- ADR 0005 — FastAPI e modelo de autenticação do painel.
 - ADR 0006 — formato do currículo mestre e rastreabilidade documental.
+- ADR 0007 — scheduler, processos, lock e worker.
 
 ## 15. Informações pendentes do usuário
 
@@ -862,3 +863,18 @@ factuais deverão ser preenchidos ou aprovados antes de gerar documentos finais:
 
 Nenhum push, pull request, deploy, publicação de pacote ou imagem será realizado sem
 autorização explícita.
+
+## 17. Status de implementação em 2026-07-18
+
+- Fase 0: concluída — auditoria, baseline e este plano.
+- Fase 1: concluída — configuração tipada, domínio, SQLAlchemy/Alembic e migração legada.
+- Fase 2: concluída — conectores comuns, normalização, deduplicação e snapshots.
+- Fase 3: concluída — filtros, score explicável e providers LLM estruturados.
+- Fases 4 e 5: concluídas — salário, Telegram, relatórios e documentos rastreáveis.
+- Fase 6: concluída — painel autenticado e pipeline auditável.
+- Fase 7: implementada — scheduler, observabilidade, Docker, CI e documentação operacional;
+  a imagem precisa ser construída em um host com Docker, indisponível no workspace atual.
+
+As condições da seção 16 foram satisfeitas durante a execução. Os dados factuais listados na
+seção 15 continuam dependendo de aprovação humana; por isso o currículo mestre distribuído
+permanece não aprovado e a geração de documentos finais é bloqueada por padrão.

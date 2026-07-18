@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from job_hunt.domain.models import JobAnalysisResult
 from job_hunt.llm.base import StructuredResponse
+from job_hunt.metrics import metrics
 from job_hunt.persistence.models import JobAnalysisRecord, LLMUsageRecord, PromptVersionRecord
 
 
@@ -22,7 +23,9 @@ class AnalysisRepository:
             select(JobAnalysisRecord).where(JobAnalysisRecord.cache_key == cache_key)
         )
         if record is None:
+            metrics.increment("analysis_cache_misses_total")
             return None
+        metrics.increment("analysis_cache_hits_total")
         payload = record.explanation_data.get("analysis")
         return JobAnalysisResult.model_validate(payload) if payload else None
 

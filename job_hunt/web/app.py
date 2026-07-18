@@ -21,6 +21,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from job_hunt.applications import ApplicationService
 from job_hunt.documents.generator import DocumentGenerator
 from job_hunt.domain.models import JobAnalysisResult, MasterResume, UnifiedJob, WorkMode
+from job_hunt.metrics import read_metrics_snapshot
 from job_hunt.persistence.database import Database, get_database_url
 from job_hunt.persistence.documents import GeneratedDocumentRepository
 from job_hunt.persistence.migration import upgrade_database
@@ -204,6 +205,10 @@ def create_app(
     @app.get("/api/dashboard", response_model=DashboardSummary)
     def dashboard_api(_user: UserDependency, session: SessionDependency) -> DashboardSummary:
         return dashboard_summary(session)
+
+    @app.get("/api/metrics", response_model=dict[str, Any])
+    def metrics_api(_user: UserDependency) -> dict[str, Any]:
+        return read_metrics_snapshot()
 
     @app.get("/api/jobs", response_model=JobPage)
     def jobs_api(

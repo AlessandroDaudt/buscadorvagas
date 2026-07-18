@@ -1,0 +1,65 @@
+name: autopilot-jobhunt
+
+x-app: &app
+  build:
+    context: .
+  image: autopilot-jobhunt:local
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://autopilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@database:5432/autopilot
+    LOG_FORMAT: ${LOG_FORMAT:-json}
+  volumes:
+    - state_data:/app/state
+    - output_data:/app/output
+    - ./config:/app/config:ro
+    - ./resume:/app/resume:ro
+    - ./companies.json:/app/companies.json:ro
+    - ./config.json:/app/config.json:ro
+  restart: unless-stopped
+  depends_on:
+    database:
+      condition: service_healthy
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: autopilot
+      POSTGRES_USER: autopilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autopilot -d autopilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  panel:
+    <<: *app
+    command: ["autopilot", "web"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://autopilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@database:5432/autopilot
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      PANEL_HOST: 0.0.0.0
+      PANEL_PORT: 8000
+      PANEL_SECURE_COOKIE: ${PANEL_SECURE_COOKIE:-false}
+    ports:
+      - "127.0.0.1:${PANEL_PORT:-8000}:8000"
+
+  scheduler:
+    <<: *app
+    command: ["autopilot", "schedule"]
+    healthcheck:
+      disable: true
+
+volumes:
+  postgres_data:
+  state_data:
+  output_data:

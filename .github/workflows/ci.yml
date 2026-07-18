@@ -3,44 +3,40 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  lint-and-test:
+  quality:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-
-      - name: Install dependencies
+      - name: Install project
+        run: python -m pip install -c constraints.lock -e ".[dev,documents]"
+      - name: Dependency consistency
+        run: python -m pip check
+      - name: Lint
+        run: python -m ruff check job_hunt tests conftest.py
+      - name: Type check
+        run: python -m mypy
+      - name: Test
+        run: python -m pytest --cov=job_hunt --cov-report=term-missing --cov-report=xml
+      - name: Verify migrations
         run: |
-          pip install -e ".[dev]"
-
-      - name: Lint with ruff
-        run: ruff check job_hunt/ tests/ conftest.py
-
-      - name: Type check (mypy)
-        run: mypy
-
-      - name: Import smoke test
-        run: python -c "from job_hunt.main import load_config; print('imports OK')"
-
-      - name: Run tests
-        # --cov-fail-under gate (85%) is configured in pyproject [tool.coverage.report].
-        run: pytest --cov=job_hunt --cov-report=term-missing --cov-report=xml
-
-      - name: Upload coverage to Codecov
+          python -m alembic upgrade head
+          python -m alembic check
+      - name: Upload coverage
         if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v5
         with:
@@ -48,32 +44,52 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
-  # Secret scan: prove no credential ever lands in a PR or in history.
-  # .env / config.json / API keys / resume PII are gitignored, but a public repo
-  # should verify, not assume.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check dist/*
+
+  dependency-and-code-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -c constraints.lock -e ".[documents]" pip-audit bandit
+      - name: Dependency audit
+        run: python -m pip_audit --skip-editable
+      - name: Python security checks
+        # Fail on medium/high findings. Low subprocess notices are reviewed:
+        # commands use fixed executables/argument arrays, shell=False and timeouts.
+        run: python -m bandit -q -ll -r job_hunt
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: lint-and-test
+  container-build:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build local image (no push)
+        uses: docker/build-push-action@v6
         with:
-          python-version: "3.12"
-      - run: pip install hatch
-      - run: hatch build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+          context: .
+          push: false
+          tags: autopilot-jobhunt:ci

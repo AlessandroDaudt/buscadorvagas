@@ -9,6 +9,23 @@ reconstructed from git history.
 
 ## [Unreleased]
 
+### Added
+- Configurable Alessandro Luis Daudt candidate profile, search preferences, salary benchmarks
+  and structured master resume.
+- SQLAlchemy/Alembic persistence for jobs, snapshots, analyses, LLM usage, documents,
+  notifications, applications and search runs, with SQLite/PostgreSQL support.
+- Extensible Greenhouse/Lever/TinyFish connectors, normalization, explainable deduplication,
+  geographic filters and deterministic-plus-structured-LLM scoring.
+- Salary estimates, signed Telegram actions, traceable Markdown/DOCX/PDF document packages and
+  an authenticated FastAPI dashboard with an audited application pipeline.
+- Cross-platform scheduler, structured logging, metrics, dependency lock, production Compose
+  stack and CI security/build checks.
+
+### Security
+- Added SSRF-safe HTTP validation, prompt-injection boundaries, request limits, Argon2 panel
+  authentication, CSRF/Host/CSP controls and secret-safe logs/configuration.
+- Automatic job application remains explicitly unsupported.
+
 ## [0.4.4] — 2026-07-09
 
 ### Added

@@ -21,6 +21,11 @@ drafts for you to review — it **never applies or submits** on your behalf.
 | 08 | [Troubleshooting](08-troubleshooting.md) | Every error we've hit, and the fix |
 | 09 | [Testing checklist](09-testing-checklist.md) | Reproducible independent test — install, gating, every provider |
 
+For the personalized production workflow (Windows, Linux, Docker, scheduler, panel,
+backup/restore, security and troubleshooting), use the current
+[project README](../README.md). The numbered guides above document the upstream-compatible
+CLI and remain useful for migration context.
+
 ## Provider matrix
 
 Set with `llm_provider` in `config.json` (or `LLM_PROVIDER` in `.env`).
@@ -30,9 +35,13 @@ Set with `llm_provider` in `config.json` (or `LLM_PROVIDER` in `.env`).
 | `openrouter` **(default)** | `OPENROUTER_API_KEY` | OpenRouter cloud (free tier) | zero-cost nightly automation |
 | `claude_cli` | none (local `claude` login) | your Claude subscription | keyless / on-demand drafts |
 | `anthropic` | `ANTHROPIC_API_KEY` | Anthropic cloud | highest-quality scoring |
+| `openai` | `OPENAI_API_KEY` | OpenAI cloud | schema-validated analysis |
+| `gemini` | `GEMINI_API_KEY` | Google cloud | configurable fallback |
+| `local` | optional | OpenAI-compatible local endpoint | private/on-prem analysis |
 
-> Page fetching **always** uses TinyFish (cloud) regardless of LLM provider — there is
-> no fully-offline mode. See [PRIVACY.md](../PRIVACY.md).
+> The legacy scanner uses TinyFish. Greenhouse and Lever connectors can fetch official public
+> APIs directly. An offline test mode uses local fixtures; no production scan is fully offline.
+> See [PRIVACY.md](../PRIVACY.md).
 
 ## 60-second start
 

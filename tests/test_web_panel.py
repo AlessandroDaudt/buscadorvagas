@@ -91,6 +91,7 @@ def test_panel_auth_csrf_dashboard_and_pipeline(tmp_path, monkeypatch):
         assert "unsafe-inline" not in login_page.headers["content-security-policy"]
         assert login_page.headers["x-frame-options"] == "DENY"
         csrf = _login(client)
+        assert client.get("/api/metrics").status_code == 200
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["total_jobs"] == 1

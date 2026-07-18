@@ -18,20 +18,27 @@ extend the tool to auto-apply.
 
 ## Trust boundaries
 
-- **API keys** (`TINYFISH_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) and your
-  `config.json` live locally in `.env` / `config.json`. Both are gitignored and scanned
+- **API keys** (`TINYFISH_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`,
+  `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, Telegram and panel secrets) live in `.env` or a
+  secret manager. `.env` and `config.json` are gitignored and scanned
   in CI (gitleaks). They must never be committed. Rotate any key that may have leaked.
 - **Your resume is PII.** It is read from `resume/` and sent to your chosen LLM provider
   for scoring and drafting. Personal résumé files are gitignored; keep them out of
   version control.
-- **Page fetching goes through TinyFish.** Job URLs and the fetched page contents transit
-  the TinyFish API (cloud). Scored results are stored locally in `state/last_scan.json`.
+- **Page fetching depends on the connector.** The legacy scanner sends discovery requests
+  through TinyFish. Greenhouse and Lever use official public APIs directly. URLs are validated
+  against SSRF, private networks and redirect abuse before HTTP access.
 - **LLM providers.** Depending on `llm_provider`, your resume and job descriptions may be
   transmitted to a third-party cloud. See [PRIVACY.md](PRIVACY.md) for the exact
   per-provider breakdown. Use `claude_cli` to keep content on your existing local Claude
   session.
-- **Telegram (opt-in).** If configured, match summaries (title, company, URL, score) are
-  sent to Telegram's servers into your own chat.
+- **Telegram (opt-in).** If configured, match summaries, score explanations, salary and job
+  URLs are sent to Telegram. Callback payloads are signed and must be restricted to configured
+  chats/users.
+- **Web panel.** It is private by default on loopback, requires an Argon2 password, signed
+  session, CSRF token and allowed Host. Use HTTPS/VPN before any remote exposure.
+- **Local persistence.** SQLite/PostgreSQL can contain profile facts, descriptions, analyses,
+  salaries, documents and application history. Backups require the same protection.
 
 ## Scraping and terms of service
 
@@ -46,8 +53,18 @@ Scraped job descriptions flow into the scoring and cover-letter prompts. A hosti
 manipulative posting can attempt to steer its own score or the text of a drafted letter
 (prompt injection). The design mitigates the worst case: the tool **never applies
 automatically** and **never treats scraped content as commands** — every draft is a local
-file for human review, and scoring only produces a number + one-line rationale. Do not
-extend the tool to execute instructions found inside scraped content.
+file for human review, and scoring produces schema-validated structured data. Do not extend the
+tool to execute instructions found inside scraped content. Versioned prompts delimit the job
+description as untrusted data.
+
+## Operational hardening
+
+- Containers run as a non-root user with capabilities removed and `no-new-privileges`.
+- Requests have timeouts and size limits; retries are bounded and limited to transient failures.
+- Logs use structured context and redact common credential assignments. Do not log raw resumes,
+  prompts, response bodies or connection URLs.
+- CI runs Ruff, mypy, tests, migrations, `pip-audit`, Bandit and Gitleaks; it builds but does not
+  publish the container.
 
 ## Reporting a vulnerability
 

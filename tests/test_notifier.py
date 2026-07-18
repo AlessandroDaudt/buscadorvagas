@@ -9,7 +9,7 @@ class _Resp:
         self.text = text
 
 
-def test_send_telegram_success(monkeypatch, capsys):
+def test_send_telegram_success(monkeypatch):
     seen = {}
 
     def fake_post(url, json=None, timeout=None):
@@ -21,7 +21,6 @@ def test_send_telegram_success(monkeypatch, capsys):
     assert notifier.send_telegram("tok", "chat", "hi") is True
     assert "bottok/sendMessage" in seen["url"]
     assert seen["json"]["parse_mode"] == "HTML"
-    assert "Telegram sent." in capsys.readouterr().out
 
 
 def test_send_telegram_http_error(monkeypatch):

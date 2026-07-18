@@ -13,6 +13,10 @@ Usage:
   autopilot db current        — show the current migration revision
   autopilot db seed           — migrate and load the configured profile/companies
   autopilot db import-legacy  — import original JSON history idempotently
+  autopilot schedule          — run the configured scheduler continuously
+  autopilot schedule --once   — run one bounded, mutually exclusive scan
+  autopilot web               — run the authenticated web panel
+  autopilot panel hash-password — create an Argon2 panel password hash
   autopilot mcp               — run the MCP server over stdio (for Claude Code)
 """
 import csv
@@ -332,6 +336,10 @@ def main() -> None:
         _run_panel_command(sys.argv[2:])
         return
 
+    if cmd == "schedule":
+        _run_schedule_command(sys.argv[2:])
+        return
+
     if cmd == "web":
         import uvicorn
 
@@ -348,8 +356,14 @@ def main() -> None:
     config = load_config()
 
     if cmd == "scan":
+        from job_hunt.operations import execute_scan
         from job_hunt.scanner import run_scan
-        run_scan(config, load_companies())
+        from job_hunt.scheduler import ScanAlreadyRunning
+
+        try:
+            execute_scan(config, load_companies(), run_scan)
+        except ScanAlreadyRunning as exc:
+            sys.exit(f"Scan skipped: {exc}")
 
     elif cmd == "draft":
         if len(sys.argv) < 3:
@@ -358,7 +372,29 @@ def main() -> None:
         draft_application(config, sys.argv[2])
 
     else:
-        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | documents | export | db | panel | web | mcp")
+        sys.exit(
+            f"Unknown command: {cmd}\n"
+            "Use: init | scan | schedule | draft | documents | export | db | panel | web | mcp"
+        )
+
+
+def _run_schedule_command(args: list[str]) -> None:
+    from job_hunt.configuration import load_search_preferences
+    from job_hunt.scheduler import ScanAlreadyRunning, run_scheduled_once, serve_schedule
+
+    unexpected = [arg for arg in args if arg != "--once"]
+    if unexpected:
+        sys.exit("Usage: autopilot schedule [--once]")
+    schedule = load_search_preferences().schedule
+    try:
+        if "--once" in args:
+            result = run_scheduled_once(schedule)
+            if result.return_code:
+                sys.exit(result.return_code)
+            return
+        serve_schedule(schedule)
+    except (ScanAlreadyRunning, ValueError) as exc:
+        sys.exit(str(exc))
 
 
 def _run_panel_command(args: list[str]) -> None:

@@ -1,364 +1,285 @@
-# autopilot-jobhunt
+# Autopilot Job Hunt — edição Alessandro Luis Daudt
 
-<!-- mcp-name: io.github.tarunlnmiit/autopilot-jobhunt -->
+Agente pessoal de descoberta e acompanhamento de vagas para cybersecurity, identity/IAM,
+endpoint security, suporte enterprise e infraestrutura. O sistema coleta vagas, normaliza e
+deduplica resultados, calcula compatibilidade explicável, estima salário, envia alertas e gera
+documentos sob demanda.
 
-**Your AI job agent. Finds, scores, and drafts applications — while you sleep.**
+> O agente **não envia candidaturas**. Salvar, descartar, planejar, marcar como candidatado e
+> gerar documentos exigem uma ação explícita do usuário. A submissão final acontece fora do
+> sistema, no canal oficial da empresa.
 
-> Scans 130+ company careers pages nightly → scores every role against your resume with an LLM → sends you the top matches on Telegram → drafts a tailored resume + cover letter on demand.
->
-> 🔒 **Drafts only — never applies.** You review every draft and submit applications yourself. See [PRIVACY.md](PRIVACY.md) for exactly what data leaves your machine.
+## Estado funcional
 
-<p align="center">
-  <img src="demo/autopilot-reel.gif?v=3" alt="autopilot-jobhunt demo — nightly scan, LLM scoring, Telegram alert, drafted application" width="300">
-</p>
+- perfil estruturado de Alessandro, preferências e empresas em arquivos configuráveis;
+- SQLite para instalação simples e PostgreSQL para produção, com migrations Alembic;
+- conectores extensíveis, incluindo Greenhouse, Lever e compatibilidade com o coletor TinyFish;
+- normalização, deduplicação, atualização de republicações, snapshots e histórico;
+- filtros geográficos que sinalizam falso remoto e restrições sem descarte silencioso;
+- score explicável 0–100 com regras determinísticas e ajuste LLM estruturado e limitado;
+- OpenAI, OpenRouter, Anthropic, Gemini e APIs locais compatíveis com OpenAI;
+- fallback, retries, timeout, cache, limites de tokens/custo e ledger de uso;
+- estimativa salarial rastreável, preservando moeda e distinguindo publicado de estimado;
+- Telegram enriquecido e callbacks assinados; nenhuma ação de candidatura automática;
+- currículo mestre JSON, currículo direcionado e cover letter em Markdown e DOCX, com PDF
+  quando o ambiente suportar a conversão;
+- painel FastAPI autenticado, responsivo, com dashboard, busca, filtros e pipeline auditável;
+- scheduler com timezone, dias, horário, timeout, retry e exclusão mútua;
+- logs JSON sem secrets, métricas locais, Docker Compose e CI de qualidade/segurança.
 
-[![CI](https://github.com/tarunlnmiit/autopilot-jobhunt/actions/workflows/ci.yml/badge.svg)](https://github.com/tarunlnmiit/autopilot-jobhunt/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/tarunlnmiit/autopilot-jobhunt/branch/main/graph/badge.svg)](https://codecov.io/gh/tarunlnmiit/autopilot-jobhunt)
-[![PyPI version](https://img.shields.io/pypi/v/autopilot-jobhunt)](https://pypi.org/project/autopilot-jobhunt/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/autopilot-jobhunt)](https://pypi.org/project/autopilot-jobhunt/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/tarunlnmiit/autopilot-jobhunt?style=social)](https://github.com/tarunlnmiit/autopilot-jobhunt/stargazers)
-[![autopilot-jobhunt MCP server](https://glama.ai/mcp/servers/tarunlnmiit/autopilot-jobhunt/badges/score.svg)](https://glama.ai/mcp/servers/tarunlnmiit/autopilot-jobhunt)
+Fontes adicionais como Workday, SmartRecruiters, Ashby, Gupy, Remotive e feeds oficiais
+continuam no roadmap. LinkedIn e Indeed só podem ser integrados por meios permitidos pelos
+respectivos termos; não há CAPTCHA bypass ou evasão antibot.
 
-Published on [PyPI](https://pypi.org/project/autopilot-jobhunt/) and listed on the [Official MCP Registry](https://registry.modelcontextprotocol.io) (`io.github.tarunlnmiit/autopilot-jobhunt`), [Glama](https://glama.ai/mcp/servers/tarunlnmiit/autopilot-jobhunt) (Quality A), and [Smithery](https://smithery.ai/servers/tarungupta-y12/autopilot-jobhunt) (MCPB bundle).
+## Arquitetura
 
-**[📖 Full setup guide with Claude Code MCP integration → SETUP.md](SETUP.md)**
+```text
+Conectores oficiais/TinyFish
+        │
+        ▼
+normalização → deduplicação → Job + JobSnapshot + JobSource
+        │
+        ├─ filtros geográficos e funcionais
+        ▼
+score determinístico → análise LLM estruturada → explicação + custo/cache
+        │
+        ├─ salário publicado/inferido/estimado
+        ├─ Telegram
+        ├─ documentos sob demanda
+        └─ painel e pipeline de candidatura
 
-> ### ⭐ Star this repo if it helps you land a job
-> This tool is free, open source, and runs entirely on your machine — no subscription, no credit card. The only "payment" I ask: **if it surfaces a role you apply to (or land), drop a star.** It takes one click, costs you nothing, and it's the single thing that pushes the project in front of the next person grinding through 130 careers pages by hand. **[⭐ Star it here →](https://github.com/tarunlnmiit/autopilot-jobhunt/stargazers)**
-
----
-
-## How it works
-
-```mermaid
-flowchart LR
-    A["🌐 130+ Careers Pages"] -->|TinyFish API| B["Job Discovery"]
-    B --> C["LLM Batch Scorer\n(0–100 fit score)"]
-    C -->|score ≥ min| D["📱 Telegram Alert\nTop N matches"]
-    C -->|on demand| E["✉️ Cover Letter\n+ Resume Bullets"]
-    C --> F["📊 CSV Export"]
+scheduler → subprocesso de scan com lock → SearchRun + relatório + métricas
 ```
 
-**The scoring prompt uses your actual resume** — not keywords. The LLM reads your full work history and the job description, then explains in one sentence why you fit or don't. No more guessing.
+As decisões importantes estão registradas em [docs/adr](docs/adr). O plano completo e o
+baseline da arquitetura original estão em
+[docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
 
-### What a scan result looks like
+## Configuração obrigatória
 
-```
-Scanning Mistral AI...
-  3 new job URLs. Fetching details...
-  Scoring jobs...
-  Saved 2 jobs from Mistral AI
+Os arquivos factuais são a fonte principal; não espalhe dados pessoais no código:
 
-Scanning HuggingFace...
-  5 new job URLs. Fetching details...
-  Scoring jobs...
-  Saved 3 jobs from HuggingFace
-
-Scanning Stripe...
-  No new jobs found
-...
-Scan complete.
-Top 5 sent to Telegram.
-```
-
-### What the Telegram notification looks like
-
-```
-Job Hunt — 06 Jun 2026
-5 matches found
-
-#1 | Mistral AI | Applied AI Engineer, ML Infrastructure
-📍 Paris/London/Marseille, On-site
-🔧 Python, LLMs, RAG, AWS, MLOps, DevOps
-✅ Role combines applied AI + ML infrastructure in EU, aligns with MLOps/RAG expertise and relocation goal
-Score: 85/100  →  https://jobs.lever.co/mistral/...
-
-#2 | HuggingFace | Staff ML Engineer
-📍 Remote (EU)
-🔧 Python, PyTorch, Transformers, CUDA, MLOps
-✅ Open-source ML role matches deep learning and distributed training background
-Score: 80/100  →  https://apply.workable.com/huggingface/...
-
-...
-
-Reply "apply to #N" to draft a tailored application.
-```
-
----
-
-## What it does
-
-```
-Every night at 2:30 AM:
-  ┌─────────────────────────────────────────────────────────┐
-  │  Scans careers pages  →  Scores with LLM  →  Notifies  │
-  │       (130+ cos)           (0–100 fit)       (Telegram) │
-  └─────────────────────────────────────────────────────────┘
-
-On demand:
-  autopilot draft 1  →  tailored resume + cover letter in 60s
-```
-
----
-
-## Usage modes
-
-```
-Mode 1: Standalone CLI (no Claude Code required)
-  pip install autopilot-jobhunt
-  autopilot scan / autopilot draft 1 / autopilot export
-
-Mode 2: Claude Code MCP (control via natural language)
-  pip install 'autopilot-jobhunt[mcp]'
-  claude mcp add autopilot-jobhunt ...
-  → "Scan for ML jobs" / "Draft application for job #2"
-```
-
-Both modes use the same config and produce the same output.
-
-## Quick start
-
-### Option A — pip install
-
-```bash
-pip install autopilot-jobhunt        # or: pip install 'autopilot-jobhunt[mcp]' for Claude Code
-mkdir my-job-hunt && cd my-job-hunt
-autopilot init                       # creates config.json, companies.json, resume/, .env
-# Fill in config.json (API keys + your profile) and resume/YOUR_RESUME.md, then:
-autopilot scan
-```
-
-### Option B — clone (recommended if you want to customize companies or contribute)
-
-```bash
-git clone https://github.com/tarunlnmiit/autopilot-jobhunt.git
-cd autopilot-jobhunt
-pip install -e '.'               # standalone CLI
-# pip install -e '.[mcp]'       # + Claude Code MCP integration
-cp config.example.json config.json && cp .env.example .env
-# Fill in your API keys and candidate profile, then:
-autopilot scan
-```
-
-**For the full walkthrough** — API key setup, Claude Code MCP registration, rate limit details, and troubleshooting — see **[SETUP.md](SETUP.md)**.
-
-### 📚 Documentation
-
-Step-by-step guides live in [`docs/`](docs/README.md):
-
-| Guide | Covers |
+| Arquivo | Conteúdo |
 |---|---|
-| [Install](docs/01-install.md) | pip / from source / `autopilot init` scaffolding |
-| [LLM providers](docs/02-providers.md) | OpenRouter fallback chain, Claude CLI (keyless), Anthropic API |
-| [API keys](docs/03-api-keys.md) | TinyFish + OpenRouter keys, where each goes |
-| [Companies & scanning](docs/04-companies-and-scanning.md) | `companies.json`, discovery + scoring, scan pacing |
-| [Integrations](docs/05-integrations.md) | Telegram notifications |
-| [MCP server & Skill](docs/06-mcp-and-skill.md) | Drive the hunt from Claude Code |
-| [Config & scoring](docs/07-config-and-scoring.md) | Candidate profile, `min_score`, `top_n` |
-| [Troubleshooting](docs/08-troubleshooting.md) | Every error we've hit, and the fix |
-| [Testing checklist](docs/09-testing-checklist.md) | Reproducible independent verification |
+| `config/candidate_profile.json` | experiência, formação, certificações, idiomas e competências |
+| `config/search_preferences.json` | cargos, tecnologias, empresas, filtros e agenda |
+| `config/salary_benchmarks.json` | faixas manuais e conversão opcional |
+| `resume/master_resume.en.json` | currículo mestre factual em inglês |
+| `companies.json` | páginas de carreira monitoradas |
+| `config.json` | compatibilidade do scanner original e provedores |
+| `.env` | somente secrets e overrides operacionais |
 
-### API keys needed
+O currículo mestre inicial está com `approved: false`. Revise datas, contato, resultados e
+descrições factuais e só então altere para `true`. A geração real de documentos é bloqueada sem
+um currículo aprovado.
 
-| Service | Cost | Required | Where to get it |
-|---|---|---|---|
-| **TinyFish** | **Free** — no credit card | Always | [agent.tinyfish.ai](https://agent.tinyfish.ai) |
-| **OpenRouter** | **Free** — 4-model fallback chain | Unless using Claude CLI / Anthropic | [openrouter.ai](https://openrouter.ai) |
-| **Telegram** | Free | Optional | [@BotFather](https://t.me/BotFather) on Telegram |
+Copie os exemplos:
 
----
-
-## Claude Code / MCP integration
-
-Use autopilot-jobhunt as an MCP server inside **Claude Code** (CLI) or **Claude Desktop**.
-
-### Step 1: Install with MCP support
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+Copy-Item config.example.json config.json
+```
 
 ```bash
-git clone https://github.com/tarunlnmiit/autopilot-jobhunt.git
-cd autopilot-jobhunt
-pip install -e '.[mcp]'
+# Linux
+cp .env.example .env
+cp config.example.json config.json
 ```
 
-### Step 2: Register with Claude Code
+No mínimo, configure `TINYFISH_API_KEY` para o scanner legado ou habilite conectores oficiais
+na aplicação. Configure apenas um provedor de IA; os demais são opcionais.
 
-**Option A — one command:**
+## Instalação sem Docker
+
+Requer Python 3.11–3.13.
+
+### Windows PowerShell
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -c constraints.lock -e ".[dev,documents]"
+autopilot db seed
+autopilot --help
+```
+
+Se a política do PowerShell bloquear a ativação, use diretamente
+`.venv\Scripts\python.exe` e `.venv\Scripts\autopilot.exe`.
+
+### Linux
 
 ```bash
-claude mcp add autopilot-jobhunt \
-  --env TINYFISH_API_KEY=your_key \
-  --env OPENROUTER_API_KEY=your_key \
-  --env TELEGRAM_TOKEN=your_token \
-  --env TELEGRAM_CHAT_ID=your_chat_id \
-  -- python -m job_hunt.mcp_server
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -c constraints.lock -e '.[dev,documents]'
+autopilot db seed
+autopilot --help
 ```
 
-**Option B — edit `~/.claude.json` manually:**
-
-```json
-{
-  "mcpServers": {
-    "autopilot-jobhunt": {
-      "command": "python",
-      "args": ["-m", "job_hunt.mcp_server"],
-      "cwd": "/absolute/path/to/autopilot-jobhunt",
-      "env": {
-        "TINYFISH_API_KEY": "your_key",
-        "OPENROUTER_API_KEY": "your_key",
-        "TELEGRAM_TOKEN": "your_token",
-        "TELEGRAM_CHAT_ID": "your_chat_id"
-      }
-    }
-  }
-}
-```
-
-> **Note:** `cwd` must point to the cloned repo — the server reads `config.json` and `companies.json` from there.
-
-### Step 3: Use it
-
-In any Claude Code session:
-
-```
-"Scan for ML jobs"
-"Draft an application for job #2"
-"Export jobs from the last 7 days with score above 70"
-```
-
-### Claude Desktop
-
-Same JSON block — add it under `mcpServers` in Claude Desktop → Settings → Developer.
-
----
-
-## Customize your target companies
-
-Edit `companies.json`. Each entry needs:
-
-```json
-{
-  "name": "Stripe",
-  "careers_url": "https://stripe.com/jobs",
-  "search_domain": "stripe.com",
-  "location": "Remote / San Francisco, CA",
-  "region": "Remote"
-}
-```
-
-The repo ships with 130+ pre-configured EU, NZ, and remote-friendly tech companies. Add or remove as you like.
-
----
-
-## How scoring works
-
-The LLM reads your full resume + the full job description and assigns a score 0–100:
-
-| Score | Meaning |
-|---|---|
-| 80–100 | Near-perfect fit — apply immediately |
-| 60–79 | Good fit — worth applying |
-| 40–59 | Partial fit — apply if pipeline is thin |
-| < 40 | Poor fit — skipped |
-
-Set `min_score` in config to filter. Default: 60.
-
----
-
-## Project structure
-
-```
-autopilot-jobhunt/
-├── job_hunt/
-│   ├── main.py          # CLI entry point
-│   ├── scanner.py       # Job discovery + LLM scoring
-│   ├── drafter.py       # Resume tailoring + cover letter
-│   ├── notifier.py      # Telegram notifications
-│   ├── llm_utils.py     # OpenRouter wrapper with fallback
-│   ├── tools.py         # Protocol-agnostic tool layer
-│   └── mcp_server.py    # MCP server (Claude/AI assistant integration)
-├── demo/                # Demo scripts for recording GIF
-├── resume/              # Put your resume here (gitignored)
-├── state/               # Scan state (gitignored)
-├── output/              # Generated applications (gitignored)
-├── companies.json       # 130+ target companies
-├── config.example.json  # Config template (copy to config.json — gitignored)
-└── config.json          # Your config (gitignored — never committed)
-```
-
----
-
-## LLM options
-
-### Default: OpenRouter (free)
-
-Uses a 4-model fallback chain — all free, no credit card needed:
-
-| Model | Role |
-|---|---|
-| `meta-llama/llama-3.3-70b-instruct:free` | Primary — best quality |
-| `nvidia/nemotron-3-super-120b-a12b:free` | Fallback 1 — 120B |
-| `google/gemma-4-31b-it:free` | Fallback 2 |
-| `qwen/qwen3-coder:free` | Fallback 3 |
-
-If one model hits its daily free-tier quota, the tool automatically tries the next. **Zero LLM cost by default.**
-
-### Alternative A: Claude Code CLI (no API key needed)
-
-If you have [Claude Code](https://claude.ai/code) installed and authenticated, you can use it as the LLM backend — no separate API key required:
-
-In `config.json`:
-
-```json
-"llm_provider": "claude_cli"
-```
-
-Or via environment variable: `LLM_PROVIDER=claude_cli autopilot scan`
-
-Optionally set a model: `"claude_cli_model": "sonnet"` (or `"opus"`, `"haiku"`, empty = Claude's default).
-
-> **Note:** Requires the `claude` binary in your PATH. Verify with `claude --print "hi"` first.
-> The MCP server and cron jobs must run in an environment where your `claude` auth session is active.
->
-> **Rate-limit note:** Each call loads your global Claude Code context (~25–30k tokens). A nightly scan
-> (5–15 LLM calls) burns significantly against your subscription's 7-day rate limit. Prefer OpenRouter
-> for nightly automation; use Claude CLI for occasional on-demand drafts.
-
-### Alternative B: Anthropic API
-
-If you have an Anthropic API key:
+SQLite é o padrão e cria `state/autopilot.db`. Para PostgreSQL, instale o extra `postgres` e
+defina uma URL com credenciais codificadas corretamente:
 
 ```bash
-pip install 'autopilot-jobhunt[claude]'
+python -m pip install -c constraints.lock -e '.[postgres,documents]'
+export DATABASE_URL='postgresql+psycopg://user:password@host:5432/autopilot'
+autopilot db upgrade
 ```
 
-In `config.json`:
+## Execução
 
-```json
-"llm_provider": "anthropic",
-"anthropic_api_key": "sk-ant-...",
-"anthropic_model": "claude-haiku-4-5-20251001"
+```bash
+autopilot scan                 # busca manual, com lock e SearchRun
+autopilot schedule --once      # busca limitada pelo max_duration_minutes
+autopilot schedule             # daemon conforme search_preferences.json
+autopilot web                  # painel em http://127.0.0.1:8000
+autopilot documents '#1'       # geração explícita para uma vaga selecionada
+autopilot export --min 70      # CSV do resultado
 ```
 
-`claude-haiku-4-5-20251001` is fast and cheap; `claude-sonnet-4-6` gives higher quality scores. A nightly scan uses ~5–15 LLM calls total (jobs scored in batches of 10).
+A agenda padrão usa `America/Sao_Paulo`, 08:00, segunda a sexta. Altere `enabled`, `days`,
+`time` e `max_duration_minutes` em `config/search_preferences.json`. A trava
+`state/scan.lock` impede duas buscas simultâneas; locks abandonados expiram após o limite da
+execução mais uma margem de segurança.
 
----
+## Painel seguro
 
-## Contributing
+Gere um hash Argon2 sem colocar a senha em histórico de shell:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). PRs welcome for:
-- Adding companies to `companies.json`
-- New ATS platform support (Rippling, Lever variants, Workday)
-- OpenAI / Gemini MCP adapters
-- Better scoring prompts
+```bash
+autopilot panel hash-password
+```
 
----
+Preencha em `.env`:
 
-## License
+```dotenv
+PANEL_USERNAME="admin"
+PANEL_PASSWORD_HASH="resultado_do_comando"
+PANEL_SESSION_SECRET="segredo_aleatorio_com_ao_menos_32_bytes"
+PANEL_ALLOWED_HOSTS="localhost,127.0.0.1"
+PANEL_SECURE_COOKIE="false"
+```
 
-MIT — see [LICENSE](LICENSE).
+Use `PANEL_SECURE_COOKIE=true` quando o painel estiver atrás de HTTPS. Não exponha a porta
+diretamente à Internet: use VPN ou reverse proxy com TLS e autenticação adicional. O painel
+desabilita documentação pública da API, valida Host/CSRF/tamanho, aplica CSP e nunca retorna
+secrets completos.
 
----
+## Docker Compose
 
-*Built by [@tarunlnmiit](https://github.com/tarunlnmiit). If this saved you hours of job searching, a ⭐ means a lot.*
+Docker Desktop ou Docker Engine com Compose v2:
+
+```bash
+cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
+cp config.example.json config.json   # PowerShell: Copy-Item config.example.json config.json
+# configure POSTGRES_PASSWORD, painel, provedor e TinyFish no .env
+docker compose config                # valida antes de iniciar
+docker compose up -d --build
+docker compose ps
+```
+
+O painel fica em `http://127.0.0.1:8000`. Os serviços são:
+
+- `database`: PostgreSQL 17 com healthcheck;
+- `panel`: aplicação web não-root;
+- `scheduler`: processo agendador; o subprocesso executado por ele é o worker atual.
+
+Não existe broker ou fila nesta fase. Os volumes `postgres_data`, `state_data` e `output_data`
+são persistentes. A imagem remove Linux capabilities, ativa `no-new-privileges` e não contém
+`.env`, `config.json` ou o currículo pessoal no contexto de build.
+
+## Provedores de IA e custo
+
+Defina `ai.enabled`, provedor principal e fallbacks em `config.json`; secrets ficam em `.env`.
+Variáveis suportadas incluem `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`,
+`GEMINI_API_KEY` e uma URL compatível com OpenAI para modelo local. O modelo OpenAI pode ser
+selecionado por `OPENAI_MODEL`.
+
+Os prompts ficam em `job_hunt/prompts/job_analysis/v1/`, são versionados e separam a descrição
+não confiável das instruções. O ajuste do LLM não substitui o score determinístico e fica
+limitado. Configure limites por execução e mês antes de habilitar consenso entre modelos.
+
+## Telegram
+
+Crie o bot com `@BotFather` e defina:
+
+```dotenv
+TELEGRAM_TOKEN="..."
+TELEGRAM_CHAT_ID="..."
+TELEGRAM_CALLBACK_SECRET="segredo_aleatorio_com_ao_menos_32_bytes"
+```
+
+Alertas incluem cargo, empresa, localização/modalidade, idade da vaga, score, salário,
+forças, lacunas, restrições, fonte e link oficial. Payloads de ações são assinados com HMAC e
+validados contra chat/usuário permitido. O projeto contém a camada segura de callbacks; a
+exposição de webhook público exige TLS e configuração operacional adicional.
+
+## Backup e restauração
+
+Pare scheduler/painel ou assegure um snapshot consistente antes do backup.
+
+SQLite:
+
+```bash
+python -c "import sqlite3; src=sqlite3.connect('state/autopilot.db'); dst=sqlite3.connect('backup-autopilot.db'); src.backup(dst); dst.close(); src.close()"
+# restauração: mantenha o original, copie o backup para state/autopilot.db e execute:
+autopilot db upgrade
+```
+
+PostgreSQL no Compose:
+
+```bash
+docker compose exec -T database pg_dump -U autopilot -d autopilot -Fc > autopilot.dump
+docker compose exec -T database pg_restore -U autopilot -d autopilot --clean --if-exists < autopilot.dump
+docker compose run --rm panel autopilot db upgrade
+```
+
+Guarde também, de forma criptografada e separada: `config/`, `companies.json`, currículo mestre
+aprovado e documentos de `output`. Nunca inclua `.env` em repositório ou backup sem proteção.
+
+## Qualidade e segurança
+
+```bash
+python -m ruff check job_hunt tests conftest.py
+python -m mypy
+python -m pytest --cov=job_hunt --cov-report=term-missing
+python -m alembic check
+python -m pip check
+python -m build
+```
+
+O GitHub Actions também executa `pip-audit`, Bandit, Gitleaks, validação de pacote e build da
+imagem sem push. Atualize o lock com:
+
+```bash
+python -m pip install uv
+uv pip compile --all-extras --universal pyproject.toml --output-file constraints.lock
+```
+
+Descrições de vagas e páginas coletadas são dados não confiáveis: nunca são executadas como
+comandos. Requisições têm allowlist/validação contra SSRF, limites e timeout. Logs usam JSON e
+redaction, com contexto `run_id`, `source_id` e `job_id` quando disponível.
+
+## Diagnóstico rápido
+
+- `config.json not found`: copie `config.example.json`.
+- `TINYFISH_API_KEY not set`: configure `.env`; placeholders são rejeitados.
+- `no approved master resume`: revise e aprove `resume/master_resume.en.json`.
+- cookie do painel não persiste localmente: use `PANEL_SECURE_COOKIE=false` apenas em HTTP local.
+- `another scan owns state/scan.lock`: existe uma busca em andamento; não apague o lock de um
+  processo ativo. Locks realmente abandonados expiram automaticamente.
+- horário incorreto: confirme `timezone`, `days` e hora do host/contêiner.
+- DOCX funciona, PDF não: instale uma conversão suportada no host ou mantenha Markdown/DOCX.
+- Compose rejeita a configuração: preencha `POSTGRES_PASSWORD` e valide com
+  `docker compose config`.
+
+Mais detalhes históricos estão em [docs](docs/README.md). Vulnerabilidades devem ser relatadas
+conforme [SECURITY.md](SECURITY.md); privacidade e dados enviados a provedores estão descritos
+em [PRIVACY.md](PRIVACY.md).
+
+## Licença
+
+MIT. Baseado no projeto original `tarunlnmiit/autopilot-jobhunt`, evoluído incrementalmente para
+o perfil e o fluxo de revisão de Alessandro Luis Daudt.

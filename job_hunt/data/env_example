@@ -3,6 +3,8 @@ TINYFISH_API_KEY="your_tinyfish_api_key_here"
 
 # Database (optional; SQLite is used by default)
 # DATABASE_URL="postgresql+psycopg://user:password@localhost:5432/autopilot"
+# Required by compose.yaml. URL-encode reserved characters if used in DATABASE_URL.
+POSTGRES_PASSWORD="replace_with_a_long_random_database_password"
 
 # OpenRouter API — free tier available at https://openrouter.ai
 OPENROUTER_API_KEY="your_openrouter_api_key_here"
@@ -39,3 +41,10 @@ PANEL_ALLOWED_HOSTS="localhost,127.0.0.1"
 PANEL_SECURE_COOKIE="false"
 PANEL_HOST="127.0.0.1"
 PANEL_PORT="8000"
+
+# Scheduler and observability
+SCHEDULER_RETRIES="1"
+SCHEDULER_POLL_SECONDS="30"
+LOG_FORMAT="json"
+LOG_LEVEL="INFO"
+LOG_FILE="scan.log"

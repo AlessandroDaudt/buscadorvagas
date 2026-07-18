@@ -134,11 +134,10 @@
     "contract_types": []
   },
   "schedule": {
-    "enabled": false,
+    "enabled": true,
     "timezone": "America/Sao_Paulo",
     "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
     "time": "08:00",
     "max_duration_minutes": 120
   }
 }
-

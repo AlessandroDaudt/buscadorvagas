@@ -13,6 +13,7 @@ import requests
 from pydantic import BaseModel, Field
 
 from job_hunt.domain.models import JobAnalysisResult, SalaryEstimateResult, UnifiedJob
+from job_hunt.metrics import metrics
 
 CallbackAction = Literal[
     "view",
@@ -194,13 +195,18 @@ class TelegramClient:
         }
         if signer:
             payload["reply_markup"] = build_inline_keyboard(job, signer)
-        response = requests.post(
-            f"https://api.telegram.org/bot{self._token}/sendMessage",
-            json=payload,
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        body = response.json()
-        if not body.get("ok"):
-            raise RuntimeError("Telegram API rejected the alert")
+        try:
+            response = requests.post(
+                f"https://api.telegram.org/bot{self._token}/sendMessage",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            body = response.json()
+            if not body.get("ok"):
+                raise RuntimeError("Telegram API rejected the alert")
+        except Exception:
+            metrics.increment("notifications_failed_total")
+            raise
+        metrics.increment("notifications_sent_total")
         return str(body.get("result", {}).get("message_id", ""))

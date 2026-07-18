@@ -1,5 +1,6 @@
 """CLI dispatch + export/config helpers. No API keys, no network."""
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -33,6 +34,25 @@ def test_scan_dispatch(monkeypatch):
     _argv(monkeypatch, "scan")
     main.main()
     assert ran["cfg"] == {"c": 1} and ran["co"] == ["co"]
+
+
+def test_schedule_once_dispatches_without_loading_secret_config(monkeypatch):
+    from job_hunt import configuration, scheduler
+
+    schedule = SimpleNamespace()
+    monkeypatch.setattr(
+        configuration,
+        "load_search_preferences",
+        lambda: SimpleNamespace(schedule=schedule),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "run_scheduled_once",
+        lambda value: SimpleNamespace(return_code=0) if value is schedule else None,
+    )
+    monkeypatch.setattr(main, "load_config", lambda: pytest.fail("load_config should not run"))
+    _argv(monkeypatch, "schedule", "--once")
+    main.main()
 
 
 def test_draft_dispatch(monkeypatch):
