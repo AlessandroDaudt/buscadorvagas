@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar - Autopilot Job Hunt</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/login.css">
+</head>
+<body>
+  <main>
+    <h1>Autopilot Job Hunt</h1>
+    <p>Painel privado de Alessandro Luis Daudt</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="username">Usuário</label>
+      <input id="username" name="username" autocomplete="username" maxlength="100" required autofocus>
+      <label for="password">Senha</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="1000" required>
+      <button type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>

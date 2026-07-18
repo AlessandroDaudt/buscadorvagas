@@ -36,6 +36,9 @@ _SECRET_CONFIG_KEYS = (
     "anthropic_api_key",
     "openai_api_key",
     "gemini_api_key",
+    "panel_password_hash",
+    "panel_session_secret",
+    "telegram_callback_secret",
 )
 
 
@@ -325,6 +328,23 @@ def main() -> None:
         _run_document_command(sys.argv[2:])
         return
 
+    if cmd == "panel":
+        _run_panel_command(sys.argv[2:])
+        return
+
+    if cmd == "web":
+        import uvicorn
+
+        uvicorn.run(
+            "job_hunt.web.app:create_app",
+            factory=True,
+            host=os.getenv("PANEL_HOST", "127.0.0.1"),
+            port=int(os.getenv("PANEL_PORT", "8000")),
+            reload=False,
+            access_log=False,
+        )
+        return
+
     config = load_config()
 
     if cmd == "scan":
@@ -338,7 +358,25 @@ def main() -> None:
         draft_application(config, sys.argv[2])
 
     else:
-        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | documents | export | db | mcp")
+        sys.exit(f"Unknown command: {cmd}\nUse: init | scan | draft | documents | export | db | panel | web | mcp")
+
+
+def _run_panel_command(args: list[str]) -> None:
+    action = args[0].lower() if args else "help"
+    if action == "hash-password":
+        import getpass
+
+        from argon2 import PasswordHasher
+
+        password = getpass.getpass("Panel password: ")
+        confirmation = getpass.getpass("Confirm password: ")
+        if password != confirmation:
+            sys.exit("Passwords do not match")
+        if len(password) < 12:
+            sys.exit("Panel password must contain at least 12 characters")
+        print(PasswordHasher().hash(password))
+        return
+    sys.exit("Usage: autopilot panel hash-password")
 
 
 def _run_document_command(args: list[str]) -> None:

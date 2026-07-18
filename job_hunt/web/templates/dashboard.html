@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Dashboard - Autopilot Job Hunt</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/dashboard.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>Autopilot Job Hunt <span class="muted">/ {{ username }}</span></h1>
+  <form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button>Sair</button></form>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><span class="muted">Vagas novas (24h)</span><strong id="new-jobs">-</strong></div>
+    <div class="card"><span class="muted">Score alto</span><strong id="high-jobs">-</strong></div>
+    <div class="card"><span class="muted">Total histórico</span><strong id="total-jobs">-</strong></div>
+  </section>
+  <section class="layout">
+    <div class="panel">
+      <h2>Vagas</h2>
+      <div class="filters">
+        <input id="search" maxlength="200" placeholder="Buscar cargo ou empresa">
+        <select id="modality"><option value="">Todas modalidades</option><option value="remote">Remoto</option><option value="hybrid">Híbrido</option><option value="onsite">Presencial</option></select>
+        <select id="disposition"><option value="">Todos estados</option><option value="discovered">Descoberta</option><option value="saved">Salva</option><option value="discarded">Descartada</option></select>
+        <input id="min-score" type="number" min="0" max="100" placeholder="Score mínimo">
+        <button id="filter" class="primary">Filtrar</button>
+      </div>
+      <table><thead><tr><th>Score</th><th>Cargo</th><th>Empresa</th><th>Local</th><th>Estado</th></tr></thead><tbody id="jobs"></tbody></table>
+      <p id="pagination" class="muted"></p>
+    </div>
+    <aside class="panel">
+      <h2>Detalhes</h2><p id="empty-detail" class="muted">Selecione uma vaga.</p>
+      <div id="detail" hidden>
+        <h3 id="detail-title"></h3><p id="detail-company" class="muted"></p><p id="detail-score"></p>
+        <a id="official-link" target="_blank" rel="noopener noreferrer">Abrir vaga oficial</a>
+        <div class="actions"><button data-disposition="saved">Salvar</button><button data-disposition="discarded">Descartar</button><button data-disposition="discovered">Restaurar</button></div>
+        <label for="application-status">Pipeline</label>
+        <select id="application-status"><option value="discovered">Descoberta</option><option value="analyzed">Analisada</option><option value="saved">Salva</option><option value="application_planned">Candidatura planejada</option><option value="application_submitted">Candidatura enviada</option><option value="recruiter_interview">Entrevista com recrutador</option><option value="technical_interview">Entrevista técnica</option><option value="manager_interview">Entrevista com gestor</option><option value="offer">Oferta</option><option value="rejected">Rejeitada</option><option value="withdrawn">Retirada</option><option value="closed">Encerrada</option></select>
+        <button id="save-application">Atualizar pipeline</button>
+        <div class="actions"><button id="generate-docs">Gerar currículo + cover letter</button></div>
+        <p id="action-status" class="status"></p>
+        <h4>Análise</h4><pre id="analysis"></pre><h4>Descrição coletada</h4><pre id="description"></pre>
+      </div>
+    </aside>
+  </section>
+  <section class="groups"><div class="panel"><h2>Empresas</h2><ul id="companies"></ul></div><div class="panel"><h2>Fontes</h2><ul id="sources"></ul></div><div class="panel"><h2>Pipeline</h2><ul id="pipeline"></ul></div></section>
+</main>
+</body>
+</html>

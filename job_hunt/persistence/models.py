@@ -105,6 +105,9 @@ class JobRecord(TimestampMixin, Base):
     seniority: Mapped[str | None] = mapped_column(String(100))
     contract_type: Mapped[str] = mapped_column(String(30), nullable=False, default="unknown")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    user_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="discovered", index=True
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
