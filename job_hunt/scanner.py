@@ -341,6 +341,53 @@ def _export_to_csv(jobs: list[dict], label: str) -> Path:
     return out_path
 
 
+def _initialize_database(config: dict):
+    if not config.get("persistence", {}).get("enabled", False):
+        return None
+    try:
+        from job_hunt.persistence.database import Database, get_database_url
+        from job_hunt.persistence.migration import upgrade_database
+
+        database_url = get_database_url()
+        upgrade_database(database_url)
+        logger.info("Relational job history enabled")
+        return Database(database_url)
+    except Exception as database_error:
+        logger.error(f"Database initialization failed: {database_error}")
+        return None
+
+
+def _persist_collected_jobs(jobs: list[dict], database) -> None:
+    from job_hunt.collection import persist_unified_jobs
+    from job_hunt.domain.models import UnifiedJob
+    from job_hunt.normalization import detect_work_mode
+
+    unified_jobs = []
+    for job in jobs:
+        try:
+            unified_jobs.append(
+                UnifiedJob(
+                    source_name="tinyfish",
+                    original_url=job["url"],
+                    company=job["company"],
+                    title=job["title"],
+                    description=job.get("content", ""),
+                    location=job.get("location"),
+                    work_mode=detect_work_mode(
+                        job.get("title"),
+                        job.get("location"),
+                        job.get("content", "")[:5000],
+                    ),
+                    apply_url=job["url"],
+                )
+            )
+        except Exception as validation_error:
+            logger.warning(f"  Invalid collected job ignored by database: {validation_error}")
+    if unified_jobs:
+        decisions = persist_unified_jobs(unified_jobs, database)
+        logger.info(f"  Database history updated: {dict(decisions)}")
+
+
 def run_scan(config: dict, companies: list[dict]) -> None:
     scan_start = time.time()
     total = len(companies)
@@ -364,6 +411,7 @@ def run_scan(config: dict, companies: list[dict]) -> None:
 
     resume_path = Path(config.get("candidate", {}).get("resume_path", "resume/YOUR_RESUME.md"))
     resume = resume_path.read_text()
+    database = _initialize_database(config)
     logger.debug(f"Resume loaded: {resume_path} ({len(resume)} chars)")
 
     min_score = config.get("candidate", {}).get("min_score", 55)
@@ -389,6 +437,11 @@ def run_scan(config: dict, companies: list[dict]) -> None:
 
             logger.info(f"  {len(new_jobs)} new job URL(s) — fetching details...")
             new_jobs = fetch_job_details(tf, new_jobs)
+            if database is not None:
+                try:
+                    _persist_collected_jobs(new_jobs, database)
+                except Exception as persistence_error:
+                    logger.error(f"  Database persistence failed: {persistence_error}")
             seen_urls.update(j["url"] for j in new_jobs)
 
             logger.info(f"  Scoring {len(new_jobs)} job(s)...")
@@ -447,6 +500,8 @@ def run_scan(config: dict, companies: list[dict]) -> None:
     new_entries = [j for j in all_scored_jobs if j["url"] not in existing_urls]
     history.extend(new_entries)
     JOB_HISTORY_FILE.write_text(json.dumps(history, indent=2))
+    if database is not None:
+        database.dispose()
     logger.debug(f"Job history updated: +{len(new_entries)} new entries ({len(history)} total)")
 
     elapsed = time.time() - scan_start

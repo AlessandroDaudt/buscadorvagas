@@ -11,6 +11,7 @@
   "candidate_profile_path": "config/candidate_profile.json",
   "search_preferences_path": "config/search_preferences.json",
   "master_resume_path": "resume/master_resume.json",
+  "persistence": {"enabled": true},
   "candidate": {
     "name": "Alessandro Luis Daudt",
     "resume_path": "resume/YOUR_RESUME.md",
