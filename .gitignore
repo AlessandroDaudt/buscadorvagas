@@ -15,10 +15,20 @@ state/*.json
 state/*.db
 state/*.db-shm
 state/*.db-wal
+state/openclaw/
 output/
 !output/.gitkeep
 scan.log
 *.log
+
+# Local backups may contain the complete private profile and resume
+backups/
+
+# Real candidate data; only generic examples/templates belong in Git
+config/candidate_profile.json
+config/search_preferences.json
+config/salary_benchmarks.json
+resume/master_resume*.json
 
 # Personal resume — add your own, never commit
 resume/*.md

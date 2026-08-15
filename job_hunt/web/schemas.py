@@ -30,6 +30,15 @@ class JobSummary(StrictModel):
     modality: str
     user_status: str
     score: float | None
+    recommendation: str | None = None
+    salary_minimum: float | None = None
+    salary_maximum: float | None = None
+    salary_currency: str | None = None
+    seniority: str | None = None
+    country: str | None = None
+    lifecycle_status: str = "active"
+    published_at: datetime | None = None
+    first_seen_at: datetime | None = None
     last_seen_at: datetime
     source_url: str | None
 
@@ -56,6 +65,18 @@ class JobDetail(StrictModel):
 
 class DispositionUpdate(StrictModel):
     status: Literal["discovered", "saved", "discarded"]
+    reasons: list[str] = Field(default_factory=list, max_length=8)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class FeedbackUpdate(StrictModel):
+    reasons: list[str] = Field(default_factory=list, max_length=8)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class ActiveLearningAnswer(StrictModel):
+    question_id: str = Field(min_length=1, max_length=100)
+    answer: str = Field(min_length=1, max_length=100)
 
 
 class ApplicationUpdate(StrictModel):

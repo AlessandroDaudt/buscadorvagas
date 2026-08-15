@@ -17,6 +17,10 @@ _ENV_KEYS = (
     "TELEGRAM_TOKEN",
     "TELEGRAM_CHAT_ID",
     "LOG_LEVEL",
+    "LOCAL_ONLY",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_CHAT_MODEL",
+    "OLLAMA_EMBEDDING_MODEL",
 )
 
 
@@ -65,19 +69,20 @@ def fake_llm(monkeypatch):
 
 @pytest.fixture
 def sample_config():
-    """Minimal valid config dict (OpenRouter provider) for scanner/drafter tests."""
+    """Minimal local-only config for scanner/drafter tests."""
     return {
-        "tinyfish_api_key": "sk-test-tinyfish",
-        "llm_provider": "openrouter",
-        "openrouter_api_key": "sk-test-openrouter",
-        "openrouter_model": "test/model:free",
-        "openrouter_fallback_models": [],
+        "local_only": True,
+        "llm_provider": "ollama",
+        "ollama": {
+            "base_url": "http://localhost:11434",
+            "chat_model": "qwen3:8b",
+            "embedding_model": "qwen3-embedding:0.6b",
+        },
+        "ai": {"enabled": False, "primary": {"provider": "ollama", "model": "qwen3:8b", "base_url": "http://localhost:11434"}},
         "candidate": {
             "name": "Test Candidate",
             "resume_path": "resume/YOUR_RESUME.md",
         },
-        "min_score": 7,
-        "top_n": 5,
     }
 
 
@@ -92,4 +97,5 @@ def sample_job():
         "location": "Remote",
         "region": "Remote",
         "score": 9,
+        "content": "Build secure identity services.",
     }

@@ -15,7 +15,7 @@ from typing import Any, Iterator
 
 _context: ContextVar[dict[str, str]] = ContextVar("autopilot_log_context", default={})
 _SECRET_PATTERN = re.compile(
-    r"(?i)(api[_-]?key|authorization|password|secret|telegram[_-]?token)"
+    r"(?i)(api[_-]?key|authorization|password|secret|access[_-]?token|token)"
     r"(\s*[:=]\s*)([^\s,;]+)"
 )
 

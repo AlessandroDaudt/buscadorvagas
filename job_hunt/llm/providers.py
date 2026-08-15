@@ -1,89 +1,28 @@
-"""Native OpenAI and portable structured-output provider adapters."""
+"""Structured local Ollama provider."""
 
 from __future__ import annotations
 
-import time
-from typing import Any, cast
-
-from openai import OpenAI
-
 from job_hunt.llm.base import StructuredResponse, StructuredT, TokenUsage
 from job_hunt.llm.config import ProviderSettings
+from job_hunt.ollama import OllamaClient, OllamaSettings, strip_markdown_fences
 
 
-def _usage_cost(settings: ProviderSettings, input_tokens: int, output_tokens: int) -> float:
-    return round(
-        input_tokens * settings.input_cost_per_million / 1_000_000
-        + output_tokens * settings.output_cost_per_million / 1_000_000,
-        6,
-    )
-
-
-class OpenAIResponsesProvider:
-    name = "openai"
+class OllamaStructuredProvider:
+    name = "ollama"
 
     def __init__(self, settings: ProviderSettings, *, timeout: float) -> None:
-        api_key = settings.api_key()
-        if not api_key:
-            raise RuntimeError(f"Missing API key in {settings.environment_key}")
         self.settings = settings
         self.model = settings.model
-        self.client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
-
-    def generate(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        response_model: type[StructuredT],
-        max_output_tokens: int,
-    ) -> StructuredResponse:
-        started = time.monotonic()
-        response = self.client.responses.parse(
-            model=self.model,
-            instructions=system_prompt,
-            input=user_prompt,
-            text_format=response_model,
-            max_output_tokens=max_output_tokens,
-            store=False,
-        )
-        parsed = response.output_parsed
-        if parsed is None:
-            raise ValueError("OpenAI response did not contain parsed structured output")
-        usage = response.usage
-        input_tokens = int(usage.input_tokens) if usage else 0
-        output_tokens = int(usage.output_tokens) if usage else 0
-        return StructuredResponse(
-            data=parsed,
-            provider=self.name,
-            model=self.model,
-            usage=TokenUsage(
-                input_tokens,
-                output_tokens,
-                _usage_cost(self.settings, input_tokens, output_tokens),
-            ),
-            duration_seconds=time.monotonic() - started,
-        )
-
-
-class OpenAICompatibleProvider:
-    def __init__(self, settings: ProviderSettings, *, timeout: float) -> None:
-        api_key = settings.api_key()
-        if not api_key and settings.provider != "local":
-            raise RuntimeError(f"Missing API key in {settings.environment_key}")
-        self.settings = settings
-        self.name = settings.provider
-        self.model = settings.model
-        base_urls = {
-            "openrouter": "https://openrouter.ai/api/v1",
-            "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        }
-        base_url = str(settings.base_url) if settings.base_url else base_urls.get(settings.provider)
-        self.client = OpenAI(
-            api_key=api_key or "local-not-secret",
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=0,
+        self.client = OllamaClient(
+            OllamaSettings(
+                base_url=settings.base_url,
+                chat_model=settings.model,
+                context_size=settings.context_size,
+                timeout_seconds=timeout,
+                keep_alive=settings.keep_alive,
+                max_concurrency=settings.max_concurrency,
+                cpu_only=settings.cpu_only,
+            )
         )
 
     def generate(
@@ -94,111 +33,34 @@ class OpenAICompatibleProvider:
         response_model: type[StructuredT],
         max_output_tokens: int,
     ) -> StructuredResponse:
-        started = time.monotonic()
-        schema = response_model.model_json_schema()
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=cast(
-                "Any",
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            ),
-            response_format=cast(
-                "Any",
-                {
-                    "type": "json_schema",
-                    "json_schema": {"name": response_model.__name__, "strict": True, "schema": schema},
-                },
-            ),
-            temperature=0,
-            max_tokens=max_output_tokens,
-        )
-        content = response.choices[0].message.content
-        if not content:
-            raise ValueError("Provider returned an empty structured response")
-        parsed = response_model.model_validate_json(content)
-        raw_usage = response.usage
-        input_tokens = int(raw_usage.prompt_tokens) if raw_usage else 0
-        output_tokens = int(raw_usage.completion_tokens) if raw_usage else 0
-        return StructuredResponse(
-            data=parsed,
-            provider=self.name,
-            model=self.model,
-            usage=TokenUsage(
-                input_tokens,
-                output_tokens,
-                _usage_cost(self.settings, input_tokens, output_tokens),
-            ),
-            duration_seconds=time.monotonic() - started,
-        )
-
-
-class AnthropicStructuredProvider:
-    name = "anthropic"
-
-    def __init__(self, settings: ProviderSettings, *, timeout: float) -> None:
-        try:
-            import anthropic
-        except ImportError as exc:
-            raise RuntimeError("Install the optional dependency: pip install '.[claude]'") from exc
-        api_key = settings.api_key()
-        if not api_key:
-            raise RuntimeError(f"Missing API key in {settings.environment_key}")
-        self.settings = settings
-        self.model = settings.model
-        self.client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=0)
-
-    def generate(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        response_model: type[StructuredT],
-        max_output_tokens: int,
-    ) -> StructuredResponse:
-        started = time.monotonic()
-        response = self.client.messages.create(
-            model=self.model,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-            max_tokens=max_output_tokens,
-            temperature=0,
-            tools=[
-                {
-                    "name": "emit_structured_analysis",
-                    "description": "Return the validated job analysis.",
-                    "input_schema": response_model.model_json_schema(),
-                }
+        result = self.client.chat(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
-            tool_choice={"type": "tool", "name": "emit_structured_analysis"},
+            temperature=0.1,
+            max_tokens=max_output_tokens,
+            # Large Pydantic schemas can exceed Ollama/llama.cpp grammar repetition
+            # limits. JSON mode still constrains the transport, while Pydantic below
+            # remains the authoritative structural validator.
+            response_format="json",
+            model=self.model,
         )
-        block = next((item for item in response.content if getattr(item, "type", "") == "tool_use"), None)
-        if block is None:
-            raise ValueError("Anthropic response did not call the structured output tool")
-        payload = getattr(block, "input", None)
-        if not isinstance(payload, dict):
-            raise ValueError("Anthropic structured output was not an object")
-        parsed = response_model.model_validate(cast("Any", payload))
-        input_tokens = int(response.usage.input_tokens)
-        output_tokens = int(response.usage.output_tokens)
+        data = response_model.model_validate_json(strip_markdown_fences(result.content))
         return StructuredResponse(
-            data=parsed,
+            data=data,
             provider=self.name,
             model=self.model,
             usage=TokenUsage(
-                input_tokens,
-                output_tokens,
-                _usage_cost(self.settings, input_tokens, output_tokens),
+                input_tokens=result.prompt_tokens,
+                output_tokens=result.completion_tokens,
+                estimated_cost_usd=0,
             ),
-            duration_seconds=time.monotonic() - started,
+            duration_seconds=result.duration_seconds,
         )
 
 
-def build_provider(settings: ProviderSettings, *, timeout: float):
-    if settings.provider == "openai":
-        return OpenAIResponsesProvider(settings, timeout=timeout)
-    if settings.provider == "anthropic":
-        return AnthropicStructuredProvider(settings, timeout=timeout)
-    return OpenAICompatibleProvider(settings, timeout=timeout)
+def build_provider(settings: ProviderSettings, *, timeout: float) -> OllamaStructuredProvider:
+    if settings.provider != "ollama":
+        raise ValueError("Only the local Ollama provider is supported")
+    return OllamaStructuredProvider(settings, timeout=timeout)

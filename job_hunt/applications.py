@@ -39,6 +39,8 @@ class ApplicationService:
         if previous in _TERMINAL and previous != status and not allow_reopen:
             raise ValueError("terminal application status requires explicit reopen")
         if previous == status:
+            if notes is not None:
+                application.notes = notes
             return application
         application.status = status.value
         if notes:

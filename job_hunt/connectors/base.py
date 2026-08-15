@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 from uuid import UUID, uuid4
 
 from job_hunt.domain.models import UnifiedJob
@@ -37,5 +37,24 @@ class JobConnector(Protocol):
     def collect(self, context: ConnectorContext) -> CollectionResult: ...
 
 
+class CompanyConfig(TypedDict, total=False):
+    name: str
+    careers_url: str
+    search_domain: str
+    location: str
+    region: str
+    connector: str
+    enabled: bool
+    allowed_domains: list[str]
+    board_token: str
+    site: str
+    account: str
+    company_id: str
+
+
 class JsonHttpClient(Protocol):
     def get_json(self, url: str, *, allowed_hosts: set[str] | None = None) -> Any: ...
+
+
+class TextHttpClient(JsonHttpClient, Protocol):
+    def get_text(self, url: str, *, allowed_hosts: set[str]) -> str: ...

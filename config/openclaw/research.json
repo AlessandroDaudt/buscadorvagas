@@ -1,0 +1,93 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": {"mode": "none"},
+    "controlUi": {"enabled": false},
+    "terminal": {"enabled": false}
+  },
+  "models": {
+    "mode": "replace",
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://ollama:11434",
+        "apiKey": "ollama-local",
+        "api": "ollama",
+        "timeoutSeconds": 300,
+        "contextWindow": 65536,
+        "maxTokens": 4096,
+        "models": [
+          {
+            "id": "qwen3.5:9b",
+            "name": "qwen3.5:9b",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 65536,
+            "maxTokens": 4096,
+            "params": {
+              "num_ctx": 65536,
+              "thinking": false,
+              "keep_alive": "15m"
+            },
+            "compat": {
+              "supportsTools": true
+            }
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace",
+      "skills": ["company-research", "skill-creator"],
+      "model": {
+        "primary": "ollama/qwen3.5:9b"
+      },
+      "timeoutSeconds": 900,
+      "heartbeat": {"every": "12h", "target": "none", "isolatedSession": true},
+      "sandbox": {
+        "mode": "off"
+      }
+    },
+    "list": [
+      {
+        "id": "public-portal-research",
+        "model": {
+          "primary": "ollama/qwen3.5:9b"
+        }
+      }
+    ]
+  },
+  "tools": {
+    "allow": ["read", "write", "edit", "exec", "process", "web_search", "web_fetch", "memory_search", "memory_get", "skill_workshop"],
+    "deny": ["apply_patch", "browser", "message", "nodes", "computer", "canvas", "terminal", "screen", "sessions_spawn", "subagents"],
+    "elevated": {"enabled": false},
+    "loopDetection": {"enabled": true},
+    "exec": {"host": "gateway", "security": "full", "ask": "off", "timeoutSec": 120},
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "duckduckgo",
+        "maxResults": 8,
+        "timeoutSeconds": 30
+      },
+      "fetch": {
+        "enabled": true,
+        "maxChars": 20000,
+        "maxResponseBytes": 750000,
+        "timeoutSeconds": 30,
+        "maxRedirects": 3,
+        "readability": true
+      }
+    }
+  },
+  "skills": {
+    "allowBundled": ["skill-creator"],
+    "workshop": {"autonomous": {"enabled": true}, "approvalPolicy": "pending", "maxPending": 20}
+  },
+  "plugins": {
+    "entries": {
+      "duckduckgo": {"enabled": true, "config": {"webSearch": {"region": "br-pt", "safeSearch": "moderate"}}}
+    }
+  }
+}

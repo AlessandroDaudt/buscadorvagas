@@ -16,6 +16,16 @@ def test_initial_migration_upgrades_empty_sqlite_database(tmp_path):
         assert "application_events" in tables
         with engine.connect() as connection:
             revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        assert revision == "b13f27a90c62"
+        assert revision == "e91c2a7f4d30"
+        assert "web_tasks" in tables
+        assert "resume_versions" in tables
+        assert "portal_discovery_proposals" in tables
+        assert "linkedin_manual_alerts" in tables
+        job_columns = {item["name"] for item in inspect(engine).get_columns("jobs")}
+        proposal_columns = {
+            item["name"] for item in inspect(engine).get_columns("portal_discovery_proposals")
+        }
+        assert {"feedback_reasons", "feedback_note"} <= job_columns
+        assert {"feedback_reasons", "feedback_note"} <= proposal_columns
     finally:
         engine.dispose()

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{{ title }} · Autopilot</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-page="{{ page }}"{% if resource_id %} data-resource-id="{{ resource_id }}"{% endif %}>
+  <header class="topbar">
+    <a class="brand" href="/"><img src="/static/favicon.svg" alt=""> Autopilot</a>
+    <span class="local-badge">somente local · sem login</span>
+  </header>
+  <div class="shell">
+    <nav aria-label="Navegação principal">
+      <a href="/">Visão geral</a><a href="/jobs">Vagas</a><a href="/scans">Buscas</a>
+      <a href="/companies">Empresas</a><a href="/discovery">Descoberta e alertas</a><a href="/resume">Currículo</a>
+      <a href="/documents">Documentos</a><a href="/exports">Exportações</a>
+      <a href="/scheduler">Agendamento</a><a href="/system">Sistema</a>
+      <a href="/settings">Configurações</a>
+    </nav>
+    <main>
+      <div class="page-heading"><div><p class="eyebrow">Painel local</p><h1>{{ title }}</h1></div><span id="global-status" role="status"></span></div>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

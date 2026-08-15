@@ -1,11 +1,9 @@
-"""Legacy notification helpers with bounded requests and secret-safe logging."""
+"""Best-effort local notifications. Notification failures never fail a scan."""
 
 from __future__ import annotations
 
-import urllib.parse
-from typing import Any
-
-import requests
+import os
+import subprocess
 
 from job_hunt.log import get_logger
 from job_hunt.metrics import metrics
@@ -13,37 +11,29 @@ from job_hunt.metrics import metrics
 logger = get_logger("autopilot.notifier")
 
 
-def send_whatsapp(phone: str, apikey: str, message: str) -> bool:
-    encoded = urllib.parse.quote(message)
-    url = f"https://api.textmebot.com/send.php?phone={phone}&text={encoded}&apikey={apikey}"
+def send_windows_notification(title: str, message: str) -> bool:
+    if os.name != "nt":
+        logger.info("Windows notification skipped on non-Windows host")
+        return False
+    safe_title = title[:100].replace("'", "''")
+    safe_message = message[:300].replace("'", "''")
+    script = (
+        "if (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue) { "
+        f"New-BurntToastNotification -Text '{safe_title}', '{safe_message}'; exit 0 }}; exit 2"
+    )
     try:
-        response = requests.get(url, timeout=15)
-        if response.status_code == 200:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            check=False,
+            capture_output=True,
+            timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode == 0:
             metrics.increment("notifications_sent_total")
-            logger.info("WhatsApp notification sent")
             return True
-        metrics.increment("notifications_failed_total")
-        logger.warning(f"WhatsApp notification failed: HTTP {response.status_code}")
-        return False
-    except Exception as exc:
-        metrics.increment("notifications_failed_total")
-        logger.warning(f"WhatsApp notification error: {type(exc).__name__}")
-        return False
-
-
-def send_telegram(bot_token: str, chat_id: str, message: str) -> bool:
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload: dict[str, Any] = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-    try:
-        response = requests.post(url, json=payload, timeout=15)
-        if response.status_code == 200:
-            metrics.increment("notifications_sent_total")
-            logger.info("Telegram notification sent")
-            return True
-        metrics.increment("notifications_failed_total")
-        logger.warning(f"Telegram notification failed: HTTP {response.status_code}")
-        return False
-    except Exception as exc:
-        metrics.increment("notifications_failed_total")
-        logger.warning(f"Telegram notification error: {type(exc).__name__}")
-        return False
+        logger.info("Windows toast support is not installed; terminal report remains available")
+    except (OSError, subprocess.TimeoutExpired):
+        logger.warning("Local Windows notification failed")
+    metrics.increment("notification_errors_total")
+    return False

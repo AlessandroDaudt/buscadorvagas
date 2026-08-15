@@ -1,31 +1,26 @@
-# Smithery deployment config — https://smithery.ai/docs
-# Runs the autopilot-jobhunt MCP server over stdio. The server reads config.json /
-# companies.json from its working directory; the env below overrides / supplies keys.
+# Local-only MCP stdio configuration. The process talks only to a local Ollama runtime.
 startCommand:
   type: stdio
   configSchema:
     type: object
     properties:
-      TINYFISH_API_KEY:
+      LOCAL_ONLY:
         type: string
-        description: "TinyFish API key — required for scanning and drafting (page fetch)."
-      LLM_PROVIDER:
+        description: "Enforce the local-only policy."
+        default: "true"
+      OLLAMA_BASE_URL:
         type: string
-        description: "LLM backend (openrouter | anthropic | claude_cli)."
-        default: "openrouter"
-      OPENROUTER_API_KEY:
+        description: "Loopback or Compose-local Ollama endpoint."
+        default: "http://localhost:11434"
+      OLLAMA_CHAT_MODEL:
         type: string
-        description: "OpenRouter API key (used when LLM_PROVIDER=openrouter)."
-      ANTHROPIC_API_KEY:
+        description: "Installed local chat model."
+        default: "qwen3:8b"
+      OLLAMA_EMBEDDING_MODEL:
         type: string
-        description: "Anthropic API key (used when LLM_PROVIDER=anthropic)."
-      TELEGRAM_TOKEN:
-        type: string
-        description: "Telegram bot token for scan notifications (optional)."
-      TELEGRAM_CHAT_ID:
-        type: string
-        description: "Telegram chat id for scan notifications (optional)."
-    additionalProperties: true
+        description: "Installed local embedding model."
+        default: "qwen3-embedding:0.6b"
+    additionalProperties: false
   commandFunction: |-
     (config) => ({
       command: 'python',

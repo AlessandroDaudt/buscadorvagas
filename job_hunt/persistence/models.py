@@ -108,6 +108,8 @@ class JobRecord(TimestampMixin, Base):
     user_status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="discovered", index=True
     )
+    feedback_reasons: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    feedback_note: Mapped[str | None] = mapped_column(Text)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -223,7 +225,9 @@ class ApplicationRecord(TimestampMixin, Base):
 
 class ApplicationEventRecord(Base):
     __tablename__ = "application_events"
-    __table_args__ = (Index("ix_application_events_application_time", "application_id", "occurred_at"),)
+    __table_args__ = (
+        Index("ix_application_events_application_time", "application_id", "occurred_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     application_id: Mapped[str] = mapped_column(
@@ -251,7 +255,9 @@ class NotificationRecord(Base):
     __tablename__ = "notifications"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), index=True)
+    job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="SET NULL"), index=True
+    )
     search_run_id: Mapped[str | None] = mapped_column(
         ForeignKey("search_runs.id", ondelete="SET NULL"), index=True
     )
@@ -280,7 +286,9 @@ class LLMUsageRecord(Base):
     __table_args__ = (Index("ix_llm_usage_created_provider", "created_at", "provider"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    search_run_id: Mapped[str | None] = mapped_column(ForeignKey("search_runs.id", ondelete="SET NULL"))
+    search_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("search_runs.id", ondelete="SET NULL")
+    )
     job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"))
     analysis_id: Mapped[str | None] = mapped_column(
         ForeignKey("job_analyses.id", ondelete="SET NULL")
@@ -302,3 +310,93 @@ class UserSettingRecord(TimestampMixin, Base):
     key: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
     value_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class WebTaskRecord(Base):
+    """Persisted local task used by the web worker; never stores document contents."""
+
+    __tablename__ = "web_tasks"
+    __table_args__ = (Index("ix_web_tasks_state_created", "state", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(30), nullable=False, default="queued", index=True)
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    message: Mapped[str] = mapped_column(String(1000), nullable=False, default="Na fila")
+    payload_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    result_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    error: Mapped[str | None] = mapped_column(String(1000))
+    cancel_safe: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResumeVersionRecord(Base):
+    """Reviewed Markdown resume version; uploaded source bytes are deliberately not retained."""
+
+    __tablename__ = "resume_versions"
+    __table_args__ = (
+        Index("ix_resume_versions_active", "active"),
+        Index("ix_resume_versions_created", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_format: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    extraction_method: Mapped[str] = mapped_column(String(100), nullable=False)
+    detected_sections: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    warnings: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    metadata_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    previous_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("resume_versions.id", ondelete="SET NULL")
+    )
+    approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class PortalDiscoveryProposalRecord(Base):
+    """Untrusted public-source suggestion; it never becomes a monitored company automatically."""
+
+    __tablename__ = "portal_discovery_proposals"
+    __table_args__ = (
+        UniqueConstraint("careers_url", name="uq_portal_discovery_careers_url"),
+        Index("ix_portal_discovery_state_created", "state", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    company_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    careers_url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    connector: Mapped[str] = mapped_column(String(50), nullable=False, default="auto")
+    allowed_domains: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    evidence_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    state: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    feedback_reasons: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    feedback_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class LinkedInManualAlertRecord(TimestampMixin, Base):
+    """A user-opened search URL; no LinkedIn API, cookie, session or automation is used."""
+
+    __tablename__ = "linkedin_manual_alerts"
+    __table_args__ = (Index("ix_linkedin_alert_enabled_created", "enabled", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    keywords: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    location: Mapped[str] = mapped_column(String(300), nullable=False, default="")
+    search_url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    cadence_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

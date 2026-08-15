@@ -32,12 +32,13 @@ class LLMRouter:
         self.run_cost_usd = 0.0
 
     def _check_budget(self, prospective_cost: float = 0) -> None:
-        if (
-            self.settings.run_cost_limit_usd == 0
-            or self.run_cost_usd + prospective_cost >= self.settings.run_cost_limit_usd
+        # Ollama is local and has no per-token bill. Zero means that cost budgets
+        # are intentionally disabled, not that every local request is rejected.
+        if self.settings.run_cost_limit_usd and (
+            self.run_cost_usd + prospective_cost >= self.settings.run_cost_limit_usd
         ):
             raise LLMBudgetExceeded("Per-run LLM cost limit reached")
-        if (
+        if self.settings.monthly_cost_limit_usd and (
             self._monthly_cost() + self.run_cost_usd + prospective_cost
             >= self.settings.monthly_cost_limit_usd
         ):

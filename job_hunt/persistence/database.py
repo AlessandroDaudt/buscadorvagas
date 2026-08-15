@@ -11,6 +11,17 @@ from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 DEFAULT_DATABASE_PATH = Path("state/autopilot.db")
+DEFAULT_SQLITE_BUSY_TIMEOUT_MS = 60_000
+
+
+def _sqlite_busy_timeout_ms() -> int:
+    try:
+        configured = int(
+            os.getenv("AUTOPILOT_SQLITE_BUSY_TIMEOUT_MS", str(DEFAULT_SQLITE_BUSY_TIMEOUT_MS))
+        )
+    except ValueError:
+        configured = DEFAULT_SQLITE_BUSY_TIMEOUT_MS
+    return max(1_000, min(configured, 300_000))
 
 
 def get_database_url() -> str:
@@ -22,20 +33,29 @@ def get_database_url() -> str:
     return f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
 
 
-def _configure_sqlite(engine: Engine) -> None:
+def _configure_sqlite(engine: Engine, *, busy_timeout_ms: int) -> None:
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, _connection_record) -> None:  # type: ignore[no-untyped-def]
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
         cursor.close()
 
 
 class Database:
     def __init__(self, url: str | None = None, *, echo: bool = False) -> None:
         self.url = url or get_database_url()
-        connect_args = {"check_same_thread": False} if self.url.startswith("sqlite") else {}
+        sqlite_timeout_ms = _sqlite_busy_timeout_ms()
+        connect_args = (
+            {
+                "check_same_thread": False,
+                "timeout": sqlite_timeout_ms / 1_000,
+            }
+            if self.url.startswith("sqlite")
+            else {}
+        )
         self.engine = create_engine(
             self.url,
             echo=echo,
@@ -44,7 +64,7 @@ class Database:
             connect_args=connect_args,
         )
         if self.url.startswith("sqlite"):
-            _configure_sqlite(self.engine)
+            _configure_sqlite(self.engine, busy_timeout_ms=sqlite_timeout_ms)
         self._session_factory = sessionmaker(
             bind=self.engine,
             class_=Session,
@@ -66,4 +86,3 @@ class Database:
 
     def dispose(self) -> None:
         self.engine.dispose()
-

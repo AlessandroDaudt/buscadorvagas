@@ -15,9 +15,9 @@ Usage:
   autopilot db import-legacy  — import original JSON history idempotently
   autopilot schedule          — run the configured scheduler continuously
   autopilot schedule --once   — run one bounded, mutually exclusive scan
-  autopilot web               — run the authenticated web panel
-  autopilot panel hash-password — create an Argon2 panel password hash
-  autopilot mcp               — run the MCP server over stdio (for Claude Code)
+  autopilot web               — run the loopback-only web panel (no login)
+  autopilot doctor            — diagnose local configuration, Ollama, GPU and files
+  autopilot mcp               — run the local MCP server over stdio
 """
 import csv
 import json
@@ -29,20 +29,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 _PLACEHOLDERS = {
-    "YOUR_TINYFISH_API_KEY", "your_tinyfish_api_key_here",
-    "YOUR_OPENROUTER_API_KEY", "your_openrouter_api_key_here",
-    "YOUR_ANTHROPIC_API_KEY", "your_anthropic_api_key_here",
+    "YOUR_API_KEY", "your_api_key_here",
 }
 
 _SECRET_CONFIG_KEYS = (
-    "tinyfish_api_key",
-    "openrouter_api_key",
-    "anthropic_api_key",
-    "openai_api_key",
-    "gemini_api_key",
     "panel_password_hash",
     "panel_session_secret",
-    "telegram_callback_secret",
 )
 
 
@@ -78,58 +70,12 @@ def load_config() -> dict:
         for key in _SECRET_CONFIG_KEYS
         if _use_env(str(config.get(key, "")))
     ]
-    telegram = config.get("telegram", {})
-    if isinstance(telegram, dict) and any(
-        _use_env(str(telegram.get(key, ""))) for key in ("token", "chat_id")
-    ):
-        embedded_secrets.append("telegram")
     if embedded_secrets:
         names = ", ".join(sorted(embedded_secrets))
         sys.exit(
             f"Secrets are not allowed in config.json ({names}).\n"
             "Move them to .env or environment variables before continuing."
         )
-
-    env_mapping = {
-        "TINYFISH_API_KEY": "tinyfish_api_key",
-        "LLM_PROVIDER": "llm_provider",
-        "OPENROUTER_API_KEY": "openrouter_api_key",
-        "OPENROUTER_MODEL": "openrouter_model",
-        "OPENROUTER_FALLBACK_MODELS": "openrouter_fallback_models",
-        "CLAUDE_CLI_MODEL": "claude_cli_model",
-        "ANTHROPIC_API_KEY": "anthropic_api_key",
-        "ANTHROPIC_MODEL": "anthropic_model",
-        "OPENAI_API_KEY": "openai_api_key",
-        "OPENAI_MODEL": "openai_model",
-        "GEMINI_API_KEY": "gemini_api_key",
-        "GEMINI_MODEL": "gemini_model",
-    }
-
-    for env_key, config_key in env_mapping.items():
-        val = os.getenv(env_key)
-        if val is not None and _use_env(val):
-            if env_key == "OPENROUTER_FALLBACK_MODELS":
-                config[config_key] = [m.strip() for m in val.split(",")]
-            else:
-                config[config_key] = val
-
-    tinyfish_key = config.get("tinyfish_api_key", "")
-    if not tinyfish_key or _is_placeholder(tinyfish_key):
-        sys.exit(
-            "TINYFISH_API_KEY not set.\n"
-            "Add it to your .env file: TINYFISH_API_KEY=sk-tinyfish-...\n"
-            "Get a key at https://agent.tinyfish.ai"
-        )
-
-    tg_token = os.getenv("TELEGRAM_TOKEN") if _use_env(os.getenv("TELEGRAM_TOKEN")) else None
-    tg_chat_id = os.getenv("TELEGRAM_CHAT_ID") if _use_env(os.getenv("TELEGRAM_CHAT_ID")) else None
-    if tg_token or tg_chat_id:
-        if "telegram" not in config:
-            config["telegram"] = {}
-        if tg_token:
-            config["telegram"]["token"] = tg_token
-        if tg_chat_id:
-            config["telegram"]["chat_id"] = tg_chat_id
 
     cand_name = os.getenv("CANDIDATE_NAME")
     cand_resume = os.getenv("RESUME_PATH")
@@ -148,15 +94,23 @@ def load_config() -> dict:
             config["candidate"]["top_n"] = int(cand_top_n)
 
     from job_hunt.configuration import enrich_legacy_config
+    from job_hunt.local_config import LocalConfigurationError, validate_local_config
 
-    return enrich_legacy_config(config)
+    enriched = enrich_legacy_config(config)
+    try:
+        return validate_local_config(enriched)
+    except LocalConfigurationError as exc:
+        sys.exit(str(exc))
 
 
 def load_companies() -> list:
     p = Path("companies.json")
     if not p.exists():
         sys.exit("companies.json not found.\nRun 'autopilot init' to set up your working directory.")
-    return json.loads(p.read_text())
+    companies = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(companies, list):
+        sys.exit("companies.json must contain a JSON array")
+    return companies
 
 
 def init_project() -> None:
@@ -174,8 +128,8 @@ def init_project() -> None:
             print(f"✓ {label}")
 
     _copy("companies.json", cwd / "companies.json", "companies.json created (130+ companies pre-loaded)")
-    _copy("config.example.json", cwd / "config.json", "config.json created — fill in your API keys and profile")
-    _copy("env_example", cwd / ".env", ".env created — fill in your API keys")
+    _copy("config.example.json", cwd / "config.json", "config.json created — review local models and profile")
+    _copy("env_example", cwd / ".env", ".env created — no external API key is required")
 
     _copy(
         "candidate_profile.json",
@@ -211,8 +165,8 @@ def init_project() -> None:
     (cwd / "output").mkdir(exist_ok=True)
 
     print("\nNext:")
-    print("  0. Keep secrets only in .env")
-    print("  1. Edit config.json — set your name, profile, and API keys")
+    print("  0. Keep LOCAL_ONLY=true")
+    print("  1. Edit config.json — set your local models and profile")
     print("  2. Replace resume/YOUR_RESUME.md with your actual resume")
     print("  3. Run: autopilot db seed")
     print("  4. Run: autopilot scan")
@@ -332,9 +286,6 @@ def main() -> None:
         _run_document_command(sys.argv[2:])
         return
 
-    if cmd == "panel":
-        _run_panel_command(sys.argv[2:])
-        return
 
     if cmd == "schedule":
         _run_schedule_command(sys.argv[2:])
@@ -352,6 +303,11 @@ def main() -> None:
             access_log=False,
         )
         return
+
+    if cmd == "doctor":
+        from job_hunt.doctor import run_doctor
+
+        raise SystemExit(run_doctor(load_config()))
 
     config = load_config()
 
@@ -374,13 +330,13 @@ def main() -> None:
     else:
         sys.exit(
             f"Unknown command: {cmd}\n"
-            "Use: init | scan | schedule | draft | documents | export | db | panel | web | mcp"
+            "Use: init | scan | schedule | draft | documents | export | db | web | mcp"
         )
 
 
 def _run_schedule_command(args: list[str]) -> None:
     from job_hunt.configuration import load_search_preferences
-    from job_hunt.scheduler import ScanAlreadyRunning, run_scheduled_once, serve_schedule
+    from job_hunt.scheduler import ScanAlreadyRunning, run_scheduled_once, serve_schedule_file
 
     unexpected = [arg for arg in args if arg != "--once"]
     if unexpected:
@@ -392,27 +348,9 @@ def _run_schedule_command(args: list[str]) -> None:
             if result.return_code:
                 sys.exit(result.return_code)
             return
-        serve_schedule(schedule)
+        serve_schedule_file()
     except (ScanAlreadyRunning, ValueError) as exc:
         sys.exit(str(exc))
-
-
-def _run_panel_command(args: list[str]) -> None:
-    action = args[0].lower() if args else "help"
-    if action == "hash-password":
-        import getpass
-
-        from argon2 import PasswordHasher
-
-        password = getpass.getpass("Panel password: ")
-        confirmation = getpass.getpass("Confirm password: ")
-        if password != confirmation:
-            sys.exit("Passwords do not match")
-        if len(password) < 12:
-            sys.exit("Panel password must contain at least 12 characters")
-        print(PasswordHasher().hash(password))
-        return
-    sys.exit("Usage: autopilot panel hash-password")
 
 
 def _run_document_command(args: list[str]) -> None:

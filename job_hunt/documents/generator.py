@@ -106,7 +106,13 @@ def render_resume_markdown(master: MasterResume) -> str:
     contact = master.contact
     contact_parts = [
         value
-        for value in (contact.location, contact.email, contact.phone, contact.linkedin, contact.github)
+        for value in (
+            contact.location,
+            contact.email,
+            contact.phone,
+            contact.linkedin,
+            contact.github,
+        )
         if value
     ]
     lines = [f"# {contact.name}", " | ".join(contact_parts), "", "## Summary", "", master.summary]
@@ -121,7 +127,9 @@ def render_resume_markdown(master: MasterResume) -> str:
     lines.extend(["", "## Education"])
     for education in master.education:
         details = " - ".join(
-            part for part in (education.qualification, education.institution, str(education.year or "")) if part
+            part
+            for part in (education.qualification, education.institution, str(education.year or ""))
+            if part
         )
         lines.append(f"- {details}")
     lines.extend(["", "## Certifications"])
@@ -283,7 +291,15 @@ def export_pdf(docx_path: Path, *, timeout_seconds: int = 60) -> Path | None:
     if not executable:
         return None
     subprocess.run(
-        [executable, "--headless", "--convert-to", "pdf", "--outdir", str(docx_path.parent), str(docx_path)],
+        [
+            executable,
+            "--headless",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            str(docx_path.parent),
+            str(docx_path),
+        ],
         check=True,
         capture_output=True,
         timeout=timeout_seconds,
@@ -309,18 +325,17 @@ class DocumentGenerator:
         create_docx: bool = True,
         create_pdf: bool = False,
         max_cover_words: int = 350,
+        minimum_version: int | None = None,
     ) -> GeneratedPackage:
         tailored, changes = _tailor(self.master, job)
         directory = self.output_root / f"{_slug(job.company)}-{str(job.id)[:8]}"
         directory.mkdir(parents=True, exist_ok=True)
         existing = list(directory.glob("manifest-v*.json"))
-        version = len(existing) + 1
+        version = max(len(existing) + 1, minimum_version or 1)
         resume_md = directory / f"resume-v{version}.md"
         cover_md = directory / f"cover-letter-v{version}.md"
         resume_md.write_text(render_resume_markdown(tailored), encoding="utf-8")
-        cover_content = render_cover_letter(
-            tailored, job, analysis, max_words=max_cover_words
-        )
+        cover_content = render_cover_letter(tailored, job, analysis, max_words=max_cover_words)
         cover_md.write_text(cover_content, encoding="utf-8")
         files = [str(resume_md), str(cover_md)]
         resume_docx = cover_docx = resume_pdf = cover_pdf = None

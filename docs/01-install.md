@@ -1,74 +1,41 @@
-# 01 — Install
+# 01 — Instalação local
 
-## Prerequisites
+O caminho suportado para esta cópia é Docker Desktop com WSL2 e GPU NVIDIA. Não execute
+`autopilot init` sobre a pasta existente: ela já contém perfil, currículo, histórico e
+preferências que os scripts preservam.
 
-```bash
-python3 --version   # must be 3.11 or higher
-git --version       # any recent version
+## Pré-requisitos
+
+- Windows 11, Docker Desktop com backend WSL2 e `docker compose`;
+- driver NVIDIA com `nvidia-smi` funcional;
+- PowerShell 7 recomendado;
+- cerca de 8 GB livres para imagens e modelos.
+
+## Instalação
+
+Na raiz do projeto:
+
+```powershell
+.\scripts\bootstrap.ps1
 ```
 
-If Python is below 3.11, install via [pyenv](https://github.com/pyenv/pyenv) or
-[python.org](https://www.python.org/downloads/).
+O script valida os pré-requisitos, cria somente arquivos ausentes, constrói a imagem,
+sobe o Ollama privado, baixa os modelos configurados e executa diagnóstico e inferência.
+Ele nunca substitui o currículo existente.
 
-## Option A — pip install (quickest)
+Para executar diretamente no host, use Python 3.11+ e:
 
-```bash
-pip install 'autopilot-jobhunt[mcp]'   # [mcp] adds Claude Code MCP support
-mkdir my-job-hunt && cd my-job-hunt
-autopilot init
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install -e ".[dev]"
+.\.venv\Scripts\autopilot doctor
 ```
 
-`autopilot init` seeds the working directory:
+O Compose publica Ollama e o painel somente em `127.0.0.1`; nenhuma chave de provedor
+externo é necessária ou aceita.
 
-```
-✓ companies.json created (130+ companies pre-loaded)
-✓ config.json created — fill in your API keys and profile
-✓ .env created — fill in your API keys
-✓ resume/YOUR_RESUME.md created — replace with your resume
-```
+## Próximos passos
 
-It also creates empty `state/` and `output/` directories.
-
-> **Always run `autopilot` commands from the directory where you ran `autopilot init`.**
-> The tool reads `config.json` and `companies.json` from the current working directory.
-
-If you only want the CLI (no Claude Code integration), drop the extra:
-`pip install autopilot-jobhunt`.
-
-## Option B — from source (customize companies / contribute)
-
-```bash
-git clone https://github.com/tarunlnmiit/autopilot-jobhunt.git
-cd autopilot-jobhunt
-pip install -e '.[mcp]'
-```
-
-For development work (tests, lint, type-check) install the dev extra instead:
-
-```bash
-pip install -e '.[dev]'
-```
-
-## Verify the install
-
-`autopilot export` reads local scan state only — it needs **no API keys** and makes
-**no** network calls:
-
-```bash
-autopilot export
-```
-
-Expected before your first scan:
-
-```
-No scan found. Run: autopilot scan
-```
-
-Seeing that message means the CLI is on your PATH and the bundled data files shipped
-correctly. If you see `autopilot: command not found`, re-run the install from inside
-the repo (Option B) or check your virtualenv.
-
-## Next
-
-- [03 — API keys](03-api-keys.md) to get scanning
-- [02 — LLM providers](02-providers.md) to choose your scoring backend
+- [Configuração local](02-providers.md)
+- [Conectores diretos](04-companies-and-scanning.md)
+- [GPU no Windows](GPU_SETUP_WINDOWS.md)

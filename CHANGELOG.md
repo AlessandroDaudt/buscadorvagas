@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — local-only Ollama migration
+
+- `LOCAL_ONLY=true` centralizado, com rejeição explícita de provedores, chaves, endpoints e
+  notificações externas.
+- Backend Ollama HTTP nativo para chat estruturado e embeddings; modelos padrão `qwen3:8b` e
+  `qwen3-embedding:0.6b`.
+- TinyFish, SDK OpenAI, extra Anthropic, Telegram e TextMeBot removidos da produção.
+- Coleta direta Greenhouse, Lever, Ashby, SmartRecruiters, Workable, JSON-LD e HTML genérico.
+- Cliente HTTPS auditado com SSRF, allowlist, redirects, rate limit, cache, robots e limites.
+- Scanner local com score determinístico, estados de ciclo de vida e arquivos atômicos.
+- Draft por vaga armazenada ou URL allowlisted, sem envio e com guarda factual.
+- Compose Ollama/autopilot/scheduler com GPU e scripts PowerShell/Linux de operação.
+- `autopilot doctor` e documentação local completa.
+
 All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

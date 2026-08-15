@@ -5,61 +5,186 @@ x-app: &app
     context: .
   image: autopilot-jobhunt:local
   env_file:
-    - .env
+    - path: .env
+      required: false
   environment:
-    DATABASE_URL: postgresql+psycopg://autopilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@database:5432/autopilot
+    LOCAL_ONLY: "true"
+    OLLAMA_BASE_URL: http://ollama:11434
+    DATABASE_URL: sqlite:////app/state/autopilot.db
     LOG_FORMAT: ${LOG_FORMAT:-json}
+    PANEL_HOST: 0.0.0.0
+    PANEL_PORT: 8000
+    OPENCLAW_CONTEXT_DIR: /app/openclaw-context
+    OPENCLAW_EXCHANGE_DIR: /app/openclaw-exchange
+    OPENCLAW_BRIDGE_INTERVAL_SECONDS: "30"
+    OPENCLAW_MODEL_ID: qwen3.5:9b
+    OPENCLAW_CONTEXT_SIZE: "65536"
+    OPENCLAW_HEARTBEAT_SECONDS: "43200"
+    AUTO_IMPORT_PORTAL_CATALOG: "true"
+    PORTAL_CATALOG_RECUR_INTERVAL_SECONDS: "60"
+    PORTAL_CATALOG_ACTIVATION_LIMIT: "120"
   volumes:
-    - state_data:/app/state
-    - output_data:/app/output
-    - ./config:/app/config:ro
+    - autopilot_state:/app/state
+    - autopilot_output:/app/output
+    - ./config.json:/app/config.json
+    - ./companies.json:/app/companies.json
+    - ./config:/app/config
     - ./resume:/app/resume:ro
-    - ./companies.json:/app/companies.json:ro
-    - ./config.json:/app/config.json:ro
+    - ./state/openclaw/context:/app/openclaw-context
+    - ./state/openclaw/exchange:/app/openclaw-exchange
   restart: unless-stopped
   depends_on:
-    database:
+    ollama:
       condition: service_healthy
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
 
 services:
-  database:
-    image: postgres:17-alpine
+  ollama:
+    image: ollama/ollama:latest
     environment:
-      POSTGRES_DB: autopilot
-      POSTGRES_USER: autopilot
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NO_CLOUD: "true"
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      OLLAMA_NUM_PARALLEL: "1"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ollama_data:/root/.ollama
+    expose:
+      - "11434"
+    ports:
+      - "127.0.0.1:11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U autopilot -d autopilot"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - default
+      - research
 
-  panel:
+  autopilot:
     <<: *app
     command: ["autopilot", "web"]
-    environment:
-      DATABASE_URL: postgresql+psycopg://autopilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@database:5432/autopilot
-      LOG_FORMAT: ${LOG_FORMAT:-json}
-      PANEL_HOST: 0.0.0.0
-      PANEL_PORT: 8000
-      PANEL_SECURE_COOKIE: ${PANEL_SECURE_COOKIE:-false}
     ports:
       - "127.0.0.1:${PANEL_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   scheduler:
     <<: *app
     command: ["autopilot", "schedule"]
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://ollama:11434/api/tags', timeout=3)"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # Optional research companion. It receives a curated, read-only view of the
+  # candidate profile, resume and feedback. It has no LinkedIn credentials,
+  # browser profile, host port, Docker socket or direct database access.
+  openclaw-research:
+    image: ghcr.io/openclaw/openclaw:latest
+    profiles: ["research"]
+    environment:
+      OLLAMA_API_KEY: ollama-local
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      OPENCLAW_DISABLE_BONJOUR: "1"
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: qwen3-embedding:0.6b
+      SEARXNG_URL: http://searxng:8080
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./config/openclaw/research.json:/home/node/.openclaw/openclaw.json:ro
+      - ./config/openclaw/workspace:/home/node/.openclaw/workspace
+      - ./state/openclaw/context:/opt/autopilot/context:ro
+      - ./state/openclaw/exchange:/opt/autopilot/exchange
+      - openclaw_research_state:/home/node/.openclaw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    depends_on:
+      ollama:
+        condition: service_healthy
+      autopilot:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    command: ["node", "dist/index.js", "gateway", "--bind", "loopback", "--port", "18789"]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - research
+
+  # Private metasearch fallback for the isolated researcher. No host port is
+  # published; only containers attached to the research network can use it.
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    profiles: ["research"]
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "--header=X-Forwarded-For: 127.0.0.1", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - research
+
+networks:
+  research:
+    driver: bridge
 
 volumes:
-  postgres_data:
-  state_data:
-  output_data:
+  ollama_data:
+  autopilot_state:
+  autopilot_output:
+  openclaw_research_state:

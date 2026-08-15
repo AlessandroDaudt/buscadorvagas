@@ -1,14 +1,11 @@
-"""Authentication, CSRF, rate limiting, and browser security controls."""
+"""Browser security controls for the unauthenticated, loopback-only panel."""
 
 from __future__ import annotations
 
 import os
 import secrets
-import time
-from collections import defaultdict, deque
+from urllib.parse import urlsplit
 
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerificationError
 from pydantic import Field
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
@@ -19,69 +16,40 @@ from job_hunt.domain.models import StrictModel
 
 
 class PanelSecuritySettings(StrictModel):
-    username: str = Field(default="admin", min_length=1, max_length=100)
-    password_hash: str = Field(min_length=20, max_length=1000)
-    session_secret: str = Field(min_length=32, max_length=1000)
-    allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "testserver"])
-    secure_cookie: bool = True
+    # username/password_hash remain accepted for backwards-compatible configuration,
+    # but are deliberately unused: this panel has no authentication layer.
+    username: str = "local"
+    password_hash: str | None = None
+    session_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(48), min_length=32)
+    allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "testserver"]
+    )
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost",
+            "http://localhost:8000",
+            "http://127.0.0.1",
+            "http://127.0.0.1:8000",
+            "http://testserver",
+        ]
+    )
+    secure_cookie: bool = False
     session_max_age_seconds: int = Field(default=28_800, ge=300, le=604_800)
-    max_request_bytes: int = Field(default=1_048_576, ge=1024, le=20_971_520)
+    max_request_bytes: int = Field(default=16_777_216, ge=1024, le=20_971_520)
 
     @classmethod
     def from_environment(cls) -> PanelSecuritySettings:
-        password_hash = os.getenv("PANEL_PASSWORD_HASH")
-        session_secret = os.getenv("PANEL_SESSION_SECRET")
-        if not password_hash or not session_secret:
-            raise RuntimeError(
-                "PANEL_PASSWORD_HASH and PANEL_SESSION_SECRET are required to start the panel"
-            )
+        session_secret = os.getenv("PANEL_SESSION_SECRET") or secrets.token_urlsafe(48)
         hosts = [
             host.strip()
             for host in os.getenv("PANEL_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
             if host.strip()
         ]
         return cls(
-            username=os.getenv("PANEL_USERNAME", "admin"),
-            password_hash=password_hash,
             session_secret=session_secret,
             allowed_hosts=hosts,
-            secure_cookie=os.getenv("PANEL_SECURE_COOKIE", "true").lower() == "true",
+            secure_cookie=os.getenv("PANEL_SECURE_COOKIE", "false").lower() == "true",
         )
-
-
-class PasswordVerifier:
-    def __init__(self, password_hash: str) -> None:
-        self.password_hash = password_hash
-        self.hasher = PasswordHasher()
-        self._dummy_hash = self.hasher.hash("not-the-password")
-
-    def verify(self, username_ok: bool, password: str) -> bool:
-        candidate_hash = self.password_hash if username_ok else self._dummy_hash
-        try:
-            valid = self.hasher.verify(candidate_hash, password)
-        except (VerificationError, InvalidHashError):
-            return False
-        return bool(valid and username_ok)
-
-
-class LoginRateLimiter:
-    def __init__(self, *, attempts: int = 5, window_seconds: int = 300) -> None:
-        self.attempts = attempts
-        self.window_seconds = window_seconds
-        self._failures: dict[str, deque[float]] = defaultdict(deque)
-
-    def check(self, identity: str) -> bool:
-        now = time.monotonic()
-        failures = self._failures[identity]
-        while failures and failures[0] <= now - self.window_seconds:
-            failures.popleft()
-        return len(failures) < self.attempts
-
-    def failure(self, identity: str) -> None:
-        self._failures[identity].append(time.monotonic())
-
-    def success(self, identity: str) -> None:
-        self._failures.pop(identity, None)
 
 
 def ensure_csrf_token(request: Request) -> str:
@@ -94,12 +62,27 @@ def ensure_csrf_token(request: Request) -> str:
 
 def validate_csrf(request: Request, supplied: str | None) -> None:
     expected = request.session.get("csrf_token")
-    if not isinstance(expected, str) or not supplied or not secrets.compare_digest(expected, supplied):
+    if (
+        not isinstance(expected, str)
+        or not supplied
+        or not secrets.compare_digest(expected, supplied)
+    ):
         raise ValueError("invalid CSRF token")
 
 
-def authenticated(request: Request) -> bool:
-    return request.session.get("user") == request.app.state.security.username
+def validate_local_origin(request: Request) -> None:
+    """Reject cross-site browser mutations even when a CSRF token is leaked."""
+    raw = request.headers.get("origin") or request.headers.get("referer")
+    if not raw:
+        return
+    parsed = urlsplit(raw)
+    security: PanelSecuritySettings = request.app.state.security
+    host = request.headers.get("host", "").casefold()
+    hostname = (parsed.hostname or "").casefold()
+    allowed_hostnames = {item.casefold() for item in security.allowed_hosts}
+    same_host = parsed.netloc.casefold() == host and hostname in allowed_hostnames
+    if parsed.scheme not in {"http", "https"} or not same_host:
+        raise ValueError("invalid request origin")
 
 
 class RequestSizeLimitMiddleware:
@@ -116,10 +99,14 @@ class RequestSizeLimitMiddleware:
         if raw_length:
             try:
                 if int(raw_length) > self.max_bytes:
-                    await JSONResponse({"detail": "request too large"}, status_code=413)(scope, receive, send)
+                    await JSONResponse({"detail": "request too large"}, status_code=413)(
+                        scope, receive, send
+                    )
                     return
             except ValueError:
-                await JSONResponse({"detail": "invalid content length"}, status_code=400)(scope, receive, send)
+                await JSONResponse({"detail": "invalid content length"}, status_code=400)(
+                    scope, receive, send
+                )
                 return
         consumed = 0
 
@@ -135,7 +122,9 @@ class RequestSizeLimitMiddleware:
         try:
             await self.app(scope, limited_receive, send)
         except RequestTooLarge:
-            await JSONResponse({"detail": "request too large"}, status_code=413)(scope, receive, send)
+            await JSONResponse({"detail": "request too large"}, status_code=413)(
+                scope, receive, send
+            )
 
 
 class RequestTooLarge(Exception):

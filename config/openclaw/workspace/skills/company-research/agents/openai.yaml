@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pesquisa de Empresas"
+  short_description: "Pesquisa empresas aderentes ao perfil profissional"
+  default_prompt: "Use $company-research para encontrar novas empresas compatíveis com meu perfil."

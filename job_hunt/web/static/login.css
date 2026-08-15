@@ -1,9 +1,0 @@
-:root { color-scheme: dark; font-family: system-ui, sans-serif; }
-body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b1220; color: #e5edf8; }
-main { width: min(390px, calc(100% - 40px)); padding: 30px; border: 1px solid #263650; border-radius: 14px; background: #111c2f; box-shadow: 0 20px 60px #0008; }
-h1 { margin-top: 0; font-size: 1.45rem; }
-label { display: block; margin: 18px 0 6px; color: #a9b9cf; }
-input { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #385071; border-radius: 8px; background: #0c1728; color: white; }
-button { width: 100%; margin-top: 22px; padding: 11px; border: 0; border-radius: 8px; background: #4d8dff; color: #07111f; font-weight: 700; cursor: pointer; }
-.error { padding: 10px; border-radius: 8px; background: #521e2b; color: #ffd6dc; }
-p { color: #8ea1bb; font-size: .9rem; }

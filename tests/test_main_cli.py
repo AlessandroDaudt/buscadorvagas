@@ -144,51 +144,25 @@ def test_load_config_missing(tmp_path, monkeypatch):
         main.load_config()
 
 
-def test_load_config_env_override(tmp_path, monkeypatch, clean_env):
+def test_load_config_local_only_without_keys(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({}))
-    monkeypatch.setenv("TINYFISH_API_KEY", "sk-env-real")
+    (tmp_path / "config.json").write_text(json.dumps({"llm_provider": "ollama", "ollama": {"base_url": "http://localhost:11434"}}))
     cfg = main.load_config()
-    assert cfg["tinyfish_api_key"] == "sk-env-real"
+    assert cfg["llm_provider"] == "ollama"
 
 
-def test_load_config_placeholder_secret_is_not_accepted(tmp_path, monkeypatch, clean_env):
+def test_load_config_placeholder_external_key_is_ignored(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({}))
+    (tmp_path / "config.json").write_text(json.dumps({"llm_provider": "ollama", "ollama": {"base_url": "http://localhost:11434"}}))
     monkeypatch.setenv("TINYFISH_API_KEY", "your_tinyfish_api_key_here")
-    with pytest.raises(SystemExit, match="TINYFISH_API_KEY not set"):
-        main.load_config()
+    assert main.load_config()["llm_provider"] == "ollama"
 
 
-def test_load_config_telegram_and_candidate_env(tmp_path, monkeypatch, clean_env):
+def test_load_config_rejects_external_notifications(tmp_path, monkeypatch, clean_env):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({}))
-    monkeypatch.setenv("TINYFISH_API_KEY", "sk-real")
+    (tmp_path / "config.json").write_text(json.dumps({"llm_provider": "ollama", "ollama": {"base_url": "http://localhost:11434"}}))
     monkeypatch.setenv("TELEGRAM_TOKEN", "tok")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
-    monkeypatch.setenv("CANDIDATE_NAME", "Ada")
-    monkeypatch.setenv("MIN_SCORE", "70")
-    monkeypatch.setenv("TOP_N", "3")
-    monkeypatch.setenv("OPENROUTER_FALLBACK_MODELS", "a/b:free, c/d:free")
-    cfg = main.load_config()
-    assert cfg["telegram"] == {"token": "tok", "chat_id": "42"}
-    assert cfg["candidate"]["name"] == "Ada"
-    assert cfg["candidate"]["min_score"] == 70 and cfg["candidate"]["top_n"] == 3
-    assert cfg["openrouter_fallback_models"] == ["a/b:free", "c/d:free"]
-
-
-def test_load_config_missing_tinyfish_key_exits(tmp_path, monkeypatch, clean_env):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({"name": "x"}))
-    with pytest.raises(SystemExit):
-        main.load_config()
-
-
-def test_load_config_rejects_embedded_secret(tmp_path, monkeypatch, clean_env):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "config.json").write_text(json.dumps({"tinyfish_api_key": "sk-real"}))
-    monkeypatch.setenv("TINYFISH_API_KEY", "sk-env")
-    with pytest.raises(SystemExit, match="Secrets are not allowed"):
+    with pytest.raises(SystemExit, match="TELEGRAM_TOKEN is configured"):
         main.load_config()
 
 

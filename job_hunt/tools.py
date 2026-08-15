@@ -1,9 +1,7 @@
 """
 Protocol-agnostic tool layer.
 
-These functions contain zero MCP/OpenAI/Google dependencies.
-The MCP server, future OpenAI tool adapter, and future Gemini function adapter
-all import from here — one place to update, all adapters benefit.
+These functions contain no cloud-provider dependency. Ollama is the only model backend.
 """
 from pathlib import Path
 
@@ -14,7 +12,7 @@ from job_hunt.scanner import run_scan
 
 def tool_scan(config_path: str = "config.json", companies_path: str = "companies.json") -> str:
     """
-    Discover new jobs, score them, send Telegram notification.
+    Discover public jobs directly, score them locally and write local reports.
     Returns a summary string.
     """
     import json

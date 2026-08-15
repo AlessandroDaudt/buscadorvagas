@@ -72,7 +72,7 @@ def test_prompt_is_versioned_and_cache_key_is_stable():
 def test_analyzer_delimits_untrusted_description_and_saves_cache():
     settings = LLMSettings(
         enabled=True,
-        primary=ProviderSettings(provider="openai", model="fixture"),
+        primary=ProviderSettings(provider="ollama", model="fixture", base_url="http://localhost:11434"),
     )
     router = FakeRouter([_response(_review(5))])
     cache = MemoryCache()
@@ -108,7 +108,7 @@ def test_invalid_or_timed_out_llm_retains_deterministic_result():
 def test_optional_consensus_records_divergence():
     settings = LLMSettings(
         enabled=True,
-        consensus_reviewer=ProviderSettings(provider="gemini", model="reviewer"),
+        consensus_reviewer=ProviderSettings(provider="ollama", model="reviewer", base_url="http://localhost:11434"),
         consensus_divergence_threshold=5,
     )
     analyzer = JobAnalyzer(

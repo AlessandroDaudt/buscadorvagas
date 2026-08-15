@@ -9,7 +9,7 @@ description = "AI-powered job scanner, scorer, and application drafter. Finds jo
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-keywords = ["job-search", "ai", "automation", "mcp", "llm", "openrouter"]
+keywords = ["job-search", "ai", "automation", "mcp", "llm", "ollama", "local-first"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
@@ -21,18 +21,14 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 dependencies = [
-    "tinyfish>=0.2.5",
-    "openai>=2.0.0",
     "pydantic>=2.11,<3",
     "python-dotenv>=1.0.0",
-    "requests>=2.31.0",
     "sqlalchemy>=2.0,<3",
     "alembic>=1.13,<2",
     "httpx>=0.27,<1",
     "fastapi>=0.116,<1",
     "uvicorn>=0.34,<1",
     "jinja2>=3.1,<4",
-    "argon2-cffi>=23,<26",
     "python-multipart>=0.0.20,<1",
     "itsdangerous>=2.2,<3",
     "tzdata>=2026.1,<2027",
@@ -40,10 +36,9 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.9"]
-claude = ["anthropic>=0.30.0"]
 documents = ["python-docx>=1.1,<2", "pypdf>=5,<7"]
 postgres = ["psycopg[binary]>=3.2,<4"]
-dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.4", "mypy>=1.8", "mcp>=1.9"]
+dev = ["pytest>=8.0", "pytest-cov>=4.0", "ruff>=0.4", "mypy>=1.8", "build>=1.2", "mcp>=1.9"]
 
 [project.scripts]
 autopilot = "job_hunt.main:main"
@@ -68,6 +63,13 @@ ignore = ["E501"]
 [tool.hatch.build.targets.wheel]
 packages = ["job_hunt"]
 include = ["job_hunt/data/**", "job_hunt/prompts/**", "job_hunt/web/templates/**", "job_hunt/web/static/**"]
+exclude = [
+    "job_hunt/data/candidate_profile.json",
+    "job_hunt/data/master_resume.json",
+    "job_hunt/data/master_resume.en.json",
+    "job_hunt/data/search_preferences.json",
+    "job_hunt/data/salary_benchmarks.json",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "alembic.ini" = "job_hunt/_migrations/alembic.ini"

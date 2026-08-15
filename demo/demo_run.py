@@ -32,7 +32,7 @@ def cmd_scan() -> None:
         if matching:
             print(f"  ✓ {len(matching)} new job(s) found")
         else:
-            print(f"  — No new jobs")
+            print("  — No new jobs")
         time.sleep(0.2)
 
     print()
@@ -52,7 +52,7 @@ def cmd_scan() -> None:
         print(f"       🔧 {job['stack']}")
         print()
 
-    print("📱 Telegram notification sent.\n")
+    print("Local report written; no external notification was sent.\n")
     state_dir = Path("state")
     state_dir.mkdir(exist_ok=True)
     (state_dir / "last_scan.json").write_text(json.dumps(jobs, indent=2))
@@ -74,7 +74,7 @@ def cmd_draft() -> None:
     for i in range(5):
         time.sleep(0.3)
         print(f"  {'█' * (i + 1)}{'░' * (4 - i)}  {(i + 1) * 20}%", end="\r")
-    print(f"  █████  100%")
+    print("  █████  100%")
     time.sleep(0.2)
     print("  ✓ Saved: output/stripe-2025-06-06/resume_stripe.md\n")
 

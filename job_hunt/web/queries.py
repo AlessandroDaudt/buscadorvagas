@@ -22,7 +22,9 @@ from job_hunt.persistence.models import (
 from job_hunt.web.schemas import DashboardSummary, JobDetail, JobPage, JobSummary
 
 
-def _group_counts(session: Session, statement: Select, *, unknown: str = "Unknown") -> dict[str, int]:
+def _group_counts(
+    session: Session, statement: Select, *, unknown: str = "Unknown"
+) -> dict[str, int]:
     return {str(key or unknown): int(count) for key, count in session.execute(statement).all()}
 
 
@@ -30,7 +32,9 @@ def dashboard_summary(session: Session) -> DashboardSummary:
     cutoff = datetime.now(timezone.utc) - timedelta(days=1)
     return DashboardSummary(
         new_jobs=int(
-            session.scalar(select(func.count()).select_from(JobRecord).where(JobRecord.first_seen_at >= cutoff))
+            session.scalar(
+                select(func.count()).select_from(JobRecord).where(JobRecord.first_seen_at >= cutoff)
+            )
             or 0
         ),
         high_score_jobs=int(
@@ -69,8 +73,10 @@ def dashboard_summary(session: Session) -> DashboardSummary:
         ),
         by_salary_currency=_group_counts(
             session,
-            select(SalaryEstimateRecord.currency, func.count(func.distinct(SalaryEstimateRecord.job_id)))
-            .group_by(SalaryEstimateRecord.currency),
+            select(
+                SalaryEstimateRecord.currency,
+                func.count(func.distinct(SalaryEstimateRecord.job_id)),
+            ).group_by(SalaryEstimateRecord.currency),
         ),
         applications_by_status=_group_counts(
             session,
@@ -85,10 +91,22 @@ def list_jobs(
     session: Session,
     *,
     search: str | None = None,
+    title: str | None = None,
     company: str | None = None,
+    technology: str | None = None,
+    location: str | None = None,
     modality: str | None = None,
+    country: str | None = None,
+    seniority: str | None = None,
+    status: str | None = None,
     user_status: str | None = None,
     minimum_score: float | None = None,
+    maximum_score: float | None = None,
+    recommendation: str | None = None,
+    minimum_salary: float | None = None,
+    discovered_after: datetime | None = None,
+    discovered_before: datetime | None = None,
+    has_documents: bool | None = None,
     sort: str = "last_seen",
     direction: str = "desc",
     page: int = 1,
@@ -103,9 +121,41 @@ def list_jobs(
         .scalar_subquery()
     )
     source_url = (
-        select(JobSourceRecord.apply_url)
+        select(func.coalesce(JobSourceRecord.apply_url, JobSourceRecord.source_url))
         .where(JobSourceRecord.job_id == JobRecord.id)
         .order_by(JobSourceRecord.updated_at.desc())
+        .limit(1)
+        .correlate(JobRecord)
+        .scalar_subquery()
+    )
+    latest_recommendation = (
+        select(JobAnalysisRecord.explanation_data["analysis"]["recommendation"].as_string())
+        .where(JobAnalysisRecord.job_id == JobRecord.id)
+        .order_by(JobAnalysisRecord.created_at.desc())
+        .limit(1)
+        .correlate(JobRecord)
+        .scalar_subquery()
+    )
+    latest_salary_minimum = (
+        select(SalaryEstimateRecord.minimum)
+        .where(SalaryEstimateRecord.job_id == JobRecord.id)
+        .order_by(SalaryEstimateRecord.created_at.desc())
+        .limit(1)
+        .correlate(JobRecord)
+        .scalar_subquery()
+    )
+    latest_salary_maximum = (
+        select(SalaryEstimateRecord.maximum)
+        .where(SalaryEstimateRecord.job_id == JobRecord.id)
+        .order_by(SalaryEstimateRecord.created_at.desc())
+        .limit(1)
+        .correlate(JobRecord)
+        .scalar_subquery()
+    )
+    latest_salary_currency = (
+        select(SalaryEstimateRecord.currency)
+        .where(SalaryEstimateRecord.job_id == JobRecord.id)
+        .order_by(SalaryEstimateRecord.created_at.desc())
         .limit(1)
         .correlate(JobRecord)
         .scalar_subquery()
@@ -114,14 +164,52 @@ def list_jobs(
     if search:
         term = f"%{search[:200]}%"
         filters.append(or_(JobRecord.title.ilike(term), CompanyRecord.display_name.ilike(term)))
+    if title:
+        filters.append(JobRecord.title.ilike(f"%{title[:200]}%"))
     if company:
         filters.append(CompanyRecord.normalized_name == " ".join(company.casefold().split()))
+    if technology:
+        term = f"%{technology[:100]}%"
+        filters.append(
+            select(JobSnapshotRecord.id)
+            .where(
+                JobSnapshotRecord.job_id == JobRecord.id, JobSnapshotRecord.description.ilike(term)
+            )
+            .exists()
+        )
+    if location:
+        filters.append(JobRecord.location.ilike(f"%{location[:200]}%"))
     if modality:
         filters.append(JobRecord.modality == modality[:30])
+    if country:
+        filters.append(JobRecord.country.ilike(f"%{country[:120]}%"))
+    if seniority:
+        filters.append(JobRecord.seniority.ilike(f"%{seniority[:100]}%"))
+    if status:
+        filters.append(JobRecord.status == status[:30])
     if user_status:
         filters.append(JobRecord.user_status == user_status[:30])
     if minimum_score is not None:
         filters.append(latest_score >= minimum_score)
+    if maximum_score is not None:
+        filters.append(latest_score <= maximum_score)
+    if recommendation:
+        filters.append(latest_recommendation == recommendation[:50])
+    if minimum_salary is not None:
+        filters.append(
+            func.coalesce(latest_salary_maximum, latest_salary_minimum) >= minimum_salary
+        )
+    if discovered_after is not None:
+        filters.append(JobRecord.first_seen_at >= discovered_after)
+    if discovered_before is not None:
+        filters.append(JobRecord.first_seen_at <= discovered_before)
+    if has_documents is not None:
+        document_exists = (
+            select(GeneratedDocumentRecord.id)
+            .where(GeneratedDocumentRecord.job_id == JobRecord.id)
+            .exists()
+        )
+        filters.append(document_exists if has_documents else ~document_exists)
 
     count_statement = (
         select(func.count(JobRecord.id))
@@ -136,11 +224,22 @@ def list_jobs(
         "title": JobRecord.title,
         "company": CompanyRecord.display_name,
         "score": latest_score,
+        "salary": func.coalesce(latest_salary_maximum, latest_salary_minimum),
+        "discovered": JobRecord.first_seen_at,
     }
     sort_column = sort_columns.get(sort, JobRecord.last_seen_at)
     ordering = sort_column.asc() if direction == "asc" else sort_column.desc()
     statement = (
-        select(JobRecord, CompanyRecord.display_name, latest_score.label("score"), source_url.label("url"))
+        select(
+            JobRecord,
+            CompanyRecord.display_name,
+            latest_score.label("score"),
+            source_url.label("url"),
+            latest_recommendation.label("recommendation"),
+            latest_salary_minimum.label("salary_minimum"),
+            latest_salary_maximum.label("salary_maximum"),
+            latest_salary_currency.label("salary_currency"),
+        )
         .join(CompanyRecord, CompanyRecord.id == JobRecord.company_id)
         .where(*filters)
         .order_by(ordering, JobRecord.id)
@@ -156,10 +255,21 @@ def list_jobs(
             modality=job.modality,
             user_status=job.user_status,
             score=float(score) if score is not None else None,
+            recommendation=recommendation_value,
+            salary_minimum=float(salary_minimum) if salary_minimum is not None else None,
+            salary_maximum=float(salary_maximum) if salary_maximum is not None else None,
+            salary_currency=salary_currency,
+            seniority=job.seniority,
+            country=job.country,
+            lifecycle_status=job.status,
+            published_at=job.published_at,
+            first_seen_at=job.first_seen_at,
             last_seen_at=job.last_seen_at,
             source_url=url,
         )
-        for job, company_name, score, url in session.execute(statement).all()
+        for job, company_name, score, url, recommendation_value, salary_minimum, salary_maximum, salary_currency in session.execute(
+            statement
+        ).all()
     ]
     return JobPage(
         items=items,
@@ -172,24 +282,35 @@ def list_jobs(
 
 def job_detail(session: Session, job_id: str) -> JobDetail | None:
     row = session.execute(
-        select(JobRecord, CompanyRecord).join(
-            CompanyRecord, CompanyRecord.id == JobRecord.company_id
-        ).where(JobRecord.id == job_id)
+        select(JobRecord, CompanyRecord)
+        .join(CompanyRecord, CompanyRecord.id == JobRecord.company_id)
+        .where(JobRecord.id == job_id)
     ).one_or_none()
     if row is None:
         return None
     job, company = row
     sources = session.scalars(
-        select(JobSourceRecord).where(JobSourceRecord.job_id == job_id).order_by(JobSourceRecord.updated_at.desc())
+        select(JobSourceRecord)
+        .where(JobSourceRecord.job_id == job_id)
+        .order_by(JobSourceRecord.updated_at.desc())
     ).all()
     snapshot = session.scalar(
-        select(JobSnapshotRecord).where(JobSnapshotRecord.job_id == job_id).order_by(JobSnapshotRecord.collected_at.desc()).limit(1)
+        select(JobSnapshotRecord)
+        .where(JobSnapshotRecord.job_id == job_id)
+        .order_by(JobSnapshotRecord.collected_at.desc())
+        .limit(1)
     )
     analysis = session.scalar(
-        select(JobAnalysisRecord).where(JobAnalysisRecord.job_id == job_id).order_by(JobAnalysisRecord.created_at.desc()).limit(1)
+        select(JobAnalysisRecord)
+        .where(JobAnalysisRecord.job_id == job_id)
+        .order_by(JobAnalysisRecord.created_at.desc())
+        .limit(1)
     )
     salary = session.scalar(
-        select(SalaryEstimateRecord).where(SalaryEstimateRecord.job_id == job_id).order_by(SalaryEstimateRecord.created_at.desc()).limit(1)
+        select(SalaryEstimateRecord)
+        .where(SalaryEstimateRecord.job_id == job_id)
+        .order_by(SalaryEstimateRecord.created_at.desc())
+        .limit(1)
     )
     application = session.scalar(
         select(ApplicationRecord).where(ApplicationRecord.job_id == job_id)
@@ -204,7 +325,9 @@ def job_detail(session: Session, job_id: str) -> JobDetail | None:
         else []
     )
     documents = session.scalars(
-        select(GeneratedDocumentRecord).where(GeneratedDocumentRecord.job_id == job_id).order_by(GeneratedDocumentRecord.created_at.desc())
+        select(GeneratedDocumentRecord)
+        .where(GeneratedDocumentRecord.job_id == job_id)
+        .order_by(GeneratedDocumentRecord.created_at.desc())
     ).all()
     return JobDetail(
         job={

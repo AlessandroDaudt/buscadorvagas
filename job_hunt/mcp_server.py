@@ -1,28 +1,12 @@
-"""
-MCP server for autopilot-jobs.
+"""Provider-neutral MCP server backed by local Ollama and public job pages."""
 
-Register with Claude Code (one command):
-  claude mcp add autopilot-jobs \\
-    --env TINYFISH_API_KEY=your_key \\
-    --env OPENROUTER_API_KEY=your_key \\
-    --env TELEGRAM_TOKEN=your_token \\
-    --env TELEGRAM_CHAT_ID=your_chat_id \\
-    -- python -m job_hunt.mcp_server
-
-Or add to ~/.claude.json manually — see README for full JSON block.
-
-cwd must be the cloned repo root (config.json and companies.json are read from there).
-"""
 from typing import Annotated
 
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.types import ToolAnnotations
 except ImportError:
-    raise ImportError(
-        "MCP SDK not installed. Run: pip install 'autopilot-jobs[mcp]'\n"
-        "Or: pip install mcp"
-    )
+    raise ImportError("MCP SDK not installed. Run: pip install 'autopilot-jobhunt[mcp]'")
 
 from pydantic import Field
 
@@ -31,74 +15,35 @@ from job_hunt.tools import tool_draft, tool_export, tool_scan
 mcp = FastMCP("autopilot-jobs")
 
 
-@mcp.tool(
-    annotations=ToolAnnotations(
-        title="Scan & score job postings",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=True,
-    )
-)
+@mcp.tool(annotations=ToolAnnotations(
+    title="Scan and score public job postings locally", readOnlyHint=False,
+    destructiveHint=False, idempotentHint=False, openWorldHint=True,
+))
 def scan_jobs() -> str:
-    """
-    Scan all configured company careers pages for new job postings,
-    score them with AI against your resume, and send a Telegram notification
-    with the top matches. Reads config.json and companies.json from the
-    working directory.
-    """
+    """Collect public postings directly and analyze locally. Never submits applications."""
     return tool_scan()
 
 
-@mcp.tool(
-    annotations=ToolAnnotations(
-        title="Draft application (never applies)",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=False,
-        openWorldHint=True,
-    )
-)
+@mcp.tool(annotations=ToolAnnotations(
+    title="Draft local application files (never applies)", readOnlyHint=False,
+    destructiveHint=False, idempotentHint=False, openWorldHint=True,
+))
 def draft_application(
-    job_ref: Annotated[
-        str,
-        Field(
-            description="Job reference: '#1' or '1' (index from the last scan), "
-            "or a full job posting URL."
-        ),
-    ],
+    job_ref: Annotated[str, Field(description="'#1' from the last scan or an allowlisted HTTPS job URL")],
 ) -> str:
-    """
-    Draft a tailored resume and cover letter for a specific job.
-
-    Never applies — every draft is saved for human review and manual submission.
-    Returns a summary of where the output files were saved.
-    """
+    """Generate local review-only files with Ollama; never uploads or submits them."""
     return tool_draft(job_ref)
 
 
-@mcp.tool(
-    annotations=ToolAnnotations(
-        title="Export jobs to CSV",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=False,
-    )
-)
+@mcp.tool(annotations=ToolAnnotations(
+    title="Export locally stored jobs", readOnlyHint=False,
+    destructiveHint=False, idempotentHint=True, openWorldHint=False,
+))
 def export_jobs(
-    min_score: Annotated[
-        int, Field(description="Only include jobs with fit score >= this value (0 = all).")
-    ] = 0,
-    days: Annotated[
-        int, Field(description="Export from the last N days of history (0 = last scan only).")
-    ] = 0,
+    min_score: Annotated[int, Field(description="Minimum local fit score (0 includes all)")] = 0,
+    days: Annotated[int, Field(description="History window in days (0 uses last scan)")] = 0,
 ) -> str:
-    """
-    Export job scan results to a CSV file in the output/ directory.
-
-    Returns a summary of the export.
-    """
+    """Export stored results to output/ without network access."""
     return tool_export(min_score=min_score, days=days)
 
 

@@ -75,6 +75,18 @@ def test_generation_is_versioned_and_cover_letter_is_bounded(tmp_path):
     assert job.title in cover
 
 
+def test_generation_honors_persisted_minimum_version(tmp_path):
+    job = _job()
+    package = DocumentGenerator(_master(), output_root=tmp_path).generate(
+        job,
+        _analysis(job),
+        create_docx=False,
+        minimum_version=4,
+    )
+    assert package.manifest.version == 4
+    assert (package.directory / "manifest-v4.json").exists()
+
+
 def test_import_markdown_and_docx_are_unapproved_candidates(tmp_path):
     markdown = tmp_path / "resume.md"
     markdown.write_text("Approved facts still require review", encoding="utf-8")
